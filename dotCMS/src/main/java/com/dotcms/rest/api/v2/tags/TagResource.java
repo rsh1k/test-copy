@@ -336,32 +336,42 @@ public class TagResource {
      *
      * @return A {@link ResponseEntityBooleanView} containing the result of the delete operation.
      */
-    @DELETE
-    @JSONP
-    @Path("/{tagId}")
-    @NoCache
-    @Produces({MediaType.APPLICATION_JSON, "application/javascript"})
-    public ResponseEntityBooleanView delete(@Context final HttpServletRequest request,
-                                            @Context final HttpServletResponse response,
-                                            @PathParam("tagId") final String tagId) throws DotDataException {
+@DELETE
+@JSONP
+@Path("/{tagId}")
+@NoCache
+@Produces({MediaType.APPLICATION_JSON, "application/javascript"})
+public ResponseEntityBooleanView delete(@Context final HttpServletRequest request,
+                                        @Context final HttpServletResponse response,
+                                        @PathParam("tagId") final String tagId) throws DotDataException {
 
-        final InitDataObject initDataObject = getInitDataObject(request, response);
-        final User user = initDataObject.getUser();
-        Logger.debug(TagResource.class,()->String.format("User '%s' is deleting tags by ID '%s'",user.getUserId(), tagId));
-        final Tag tag = Try.of(() -> tagAPI.getTagByTagId(tagId)).getOrNull();
-        if (null == tag) {
-
-            final String errorMessage = Try.of(() -> LanguageUtil
-                    .get(user.getLocale(), "tag.id.not.found", tagId))
-                    .getOrElse(String.format("Tag with id %s wasn't found.",
-                            tagId)); //fallback message
-            Logger.error(TagResource.class, errorMessage);
-            throw new DoesNotExistException(errorMessage);
-        }
-
-        tagAPI.deleteTag(tag);
-        return new ResponseEntityBooleanView(true);
+    final InitDataObject initDataObject = getInitDataObject(request, response);
+    final User user = initDataObject.getUser();
+    
+    // Example of a permission check
+    if (!user.hasPermission("DELETE_TAG")) {
+        final String errorMessage = Try.of(() -> LanguageUtil
+                .get(user.getLocale(), "permission.denied"))
+                .getOrElse("You do not have permission to delete tags."); // fallback message
+        Logger.error(TagResource.class, errorMessage);
+        throw new UnauthorizedException(errorMessage);
     }
+    
+    Logger.debug(TagResource.class,()->String.format("User '%s' is deleting tags by ID '%s'",user.getUserId(), tagId));
+    final Tag tag = Try.of(() -> tagAPI.getTagByTagId(tagId)).getOrNull();
+    if (null == tag) {
+        final String errorMessage = Try.of(() -> LanguageUtil
+                .get(user.getLocale(), "tag.id.not.found", tagId))
+                .getOrElse(String.format("Tag with id %s wasn't found.",
+                        tagId)); //fallback message
+        Logger.error(TagResource.class, errorMessage);
+        throw new DoesNotExistException(errorMessage);
+    }
+
+    tagAPI.deleteTag(tag);
+    return new ResponseEntityBooleanView(true);
+}
+
 
     /**
      * Binds a Tag with a given inode. The lookup can be done via tag name or tag id. if the tag

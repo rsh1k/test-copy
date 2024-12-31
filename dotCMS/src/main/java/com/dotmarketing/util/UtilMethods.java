@@ -72,6 +72,7 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import java.util.Set;
 
 /**
  * Provides several widely used routines that handle, verify or format many data structures, such as
@@ -142,6 +143,8 @@ public class UtilMethods {
     static HashMap<String, String> daysOfWeek = null;
 
     private static final String UTILMETHODS_DEFAULT_ENCODING = "UTF-8";
+
+    private static final Set<String> VECTOR_EXTENSIONS = Set.of("svg", "eps", "ai", "dxf");
 
     public static final java.util.Date pidmsToDate(String d) {
         java.text.ParsePosition pos = new java.text.ParsePosition(0);
@@ -3678,4 +3681,25 @@ public class UtilMethods {
     public static <T extends CharSequence> boolean exceedsMaxLength(final T value, final int maxLength) {
         return value != null && value.length() > maxLength;
     }
+
+    /**
+     * Extracts the user id from a User object or returns null if the object is null
+     *
+     * @param user User object
+     * @return User id or null
+     */
+    public static String extractUserIdOrNull(final User user) {
+        return Optional.ofNullable(user).map(User::getUserId).orElse(null);
+    }
+
+    /**
+     * Determines whether the given file extension corresponds to a vector image format.
+     *
+     * @param fileExtension The extension of the file to be checked.
+     * @return true if the file extension indicates a vector image format; false otherwise.
+     */
+    public static boolean isVectorImage(String fileExtension) {
+        return VECTOR_EXTENSIONS.contains(fileExtension);
+    }
+
 }

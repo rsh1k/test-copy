@@ -1,5 +1,6 @@
 package com.dotcms.publishing;
 
+import com.dotcms.LicenseTestUtil;
 import com.dotcms.contenttype.model.field.Field;
 import com.dotcms.contenttype.model.field.TextField;
 import com.dotcms.contenttype.model.type.ContentType;
@@ -64,6 +65,7 @@ import com.dotmarketing.portlets.contentlet.model.ContentletVersionInfo;
 import com.dotmarketing.portlets.folders.model.Folder;
 import com.dotmarketing.portlets.htmlpageasset.business.HTMLPageAssetAPI;
 import com.dotmarketing.portlets.htmlpageasset.model.HTMLPageAsset;
+import com.dotmarketing.portlets.languagesmanager.business.UniqueLanguageDataGen;
 import com.dotmarketing.portlets.languagesmanager.model.Language;
 import com.dotmarketing.portlets.links.model.Link;
 import com.dotmarketing.portlets.rules.RuleDataGen;
@@ -130,13 +132,14 @@ import static org.junit.Assert.assertTrue;
 public class PublisherAPIImplTest {
 
     public static final String DEPENDENCY_FROM_TEMPLATE = "Dependency from: ID: %s Title: %s";
-    private static String MANIFEST_HEADERS = "INCLUDED/EXCLUDED,object type, Id, inode, title, site, folder, excluded by, included by";
+    private static String MANIFEST_HEADERS = "INCLUDED/EXCLUDED,object type, Id, inode, title, site, folder, excluded by, reason to be evaluated";
     private static Contentlet languageVariableCreated;
 
     private static List<String> manifestMetadataLines = list("#Bundle ID:", "#Operation", "#Filter:");
     public static void prepare() throws Exception {
         //Setting web app environment
         IntegrationTestInitService.getInstance().init();
+        LicenseTestUtil.getLicense();
     }
 
     public static void removeLanguageVariable(){
@@ -151,7 +154,7 @@ public class PublisherAPIImplTest {
                 APILocator.getContentTypeAPI(systemUser).find(LanguageVariableAPI.LANGUAGEVARIABLE_VAR_NAME);
 
         if (langVariables.isEmpty()) {
-            final Language language = new com.dotmarketing.portlets.languagesmanager.business.LanguageDataGen().nextPersisted();
+            final Language language = new UniqueLanguageDataGen().nextPersisted();
 
             final Host host = new SiteDataGen().nextPersisted();
             languageVariableCreated = new ContentletDataGen(languageVariableContentType.id())
@@ -230,7 +233,8 @@ public class PublisherAPIImplTest {
                         experiment, list(variant, experimentPage, pageNewVersion),
                         experimentPage, list(host, template, pageContentType, language)
                 )),
-                "/bundlers-test/experiment/experiment.json", true, true);
+                "/bundlers-test/experiment/experiment.json",
+                true, true, experimentPage);
     }
 
     private static TestAsset getExperimentVariantDifferentLayout()
@@ -713,8 +717,15 @@ public class PublisherAPIImplTest {
             final File manifestFile = new File(manifestFilePath);
 
             if (testAsset.addExcludeForSystemTemplate()) {
-                manifestLines.addExcludes(new HashMap<>(Map.of("Excluded System Folder/Host/Container/Template",
-                        list(APILocator.getTemplateAPI().systemTemplate()))));
+                final ManifestItem dependsFrom = (ManifestItem) testAsset.systemTemplateDependsFrom;
+                final String evaluateTemplateReason = dependsFrom != null ?
+                        String.format(DEPENDENCY_FROM_TEMPLATE,
+                                dependsFrom.getManifestInfo().id(),
+                                dependsFrom.getManifestInfo().title()) : "";
+
+                manifestLines.addExclude(
+                        APILocator.getTemplateAPI().systemTemplate(),
+                        evaluateTemplateReason,"Excluded System Folder/Host/Container/Template");
             }
 
             assertManifestFile(manifestFile, manifestLines);
@@ -761,10 +772,16 @@ public class PublisherAPIImplTest {
                     String.format(DEPENDENCY_FROM_TEMPLATE, languageVariablesContentType.id(), languageVariablesContentType.name()));
 
             final Host systemHost = APILocator.getHostAPI().findSystemHost();
-            manifestLines.addExclude(systemHost, "Excluded System Folder/Host/Container/Template");
-
-            manifestLines.addExclude(APILocator.getFolderAPI().findSystemFolder(),
+            manifestLines.addExclude(systemHost,
+                    String.format(DEPENDENCY_FROM_TEMPLATE, languageVariablesContentType.id(), languageVariablesContentType.name()),
                     "Excluded System Folder/Host/Container/Template");
+
+            final Contentlet languageVariable = languageVariablesAddInBundle.get(0);
+            final Folder systemFolder = APILocator.getFolderAPI().findSystemFolder();
+            manifestLines.addExclude(systemFolder,
+                    String.format(DEPENDENCY_FROM_TEMPLATE, languageVariable.getIdentifier(), languageVariable.getTitle()),
+                    "Excluded System Folder/Host/Container/Template");
+
         }
     }
 
@@ -1205,6 +1222,7 @@ public class PublisherAPIImplTest {
         boolean addLanguageVariableDependencies = true;
         Set<Object> otherVersions;
         private boolean excludeForSystemTemplate;
+        private ManifestItem systemTemplateDependsFrom;
 
         public TestAsset(
                 final Object asset,
@@ -1237,9 +1255,10 @@ public class PublisherAPIImplTest {
                 final Map<ManifestItem, Collection<ManifestItem>> dependencies,
                 final String fileExpectedPath,
                 final boolean addLanguageVariableDependencies,
-                final boolean excludeForSystemTemplate) {
+                final boolean excludeForSystemTemplate,
+                final ManifestItem systemTemplateDependsFrom) {
 
-            this(asset, dependencies, null, fileExpectedPath, addLanguageVariableDependencies, excludeForSystemTemplate);
+            this(asset, dependencies, null, fileExpectedPath, addLanguageVariableDependencies, excludeForSystemTemplate, systemTemplateDependsFrom);
         }
 
         public TestAsset(
@@ -1248,7 +1267,7 @@ public class PublisherAPIImplTest {
                 final Set<Object> otherVersions,
                 final String fileExpectedPath,
                 final boolean addLanguageVariableDependencies) {
-            this(asset, dependencies, otherVersions, fileExpectedPath, addLanguageVariableDependencies, false);
+            this(asset, dependencies, otherVersions, fileExpectedPath, addLanguageVariableDependencies, false, null);
         }
 
         public TestAsset(
@@ -1257,7 +1276,8 @@ public class PublisherAPIImplTest {
                 final Set<Object> otherVersions,
                 final String fileExpectedPath,
                 final boolean addLanguageVariableDependencies,
-                final boolean excludeForSystemTemplate) {
+                final boolean excludeForSystemTemplate,
+                final ManifestItem systemTemplateDependsFrom) {
 
             this.asset = asset;
             this.dependencies = dependencies;
@@ -1265,6 +1285,7 @@ public class PublisherAPIImplTest {
             this.addLanguageVariableDependencies = addLanguageVariableDependencies;
             this.otherVersions = otherVersions != null ? otherVersions : Collections.EMPTY_SET;
             this.excludeForSystemTemplate = excludeForSystemTemplate;
+            this.systemTemplateDependsFrom = systemTemplateDependsFrom;
         }
 
         public ManifestItemsMapTest manifestLines() {
@@ -1286,6 +1307,10 @@ public class PublisherAPIImplTest {
 
         public boolean addExcludeForSystemTemplate() {
             return excludeForSystemTemplate;
+        }
+
+        public ManifestItem getSystemTemplateDependsFrom() {
+            return systemTemplateDependsFrom;
         }
     }
 

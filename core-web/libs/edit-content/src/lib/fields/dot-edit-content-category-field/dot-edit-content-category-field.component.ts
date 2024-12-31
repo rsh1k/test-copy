@@ -7,8 +7,7 @@ import {
     inject,
     Injector,
     input,
-    OnInit,
-    signal
+    OnInit
 } from '@angular/core';
 import { ControlContainer, FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 
@@ -18,7 +17,7 @@ import { DotCMSContentlet, DotCMSContentTypeField } from '@dotcms/dotcms-models'
 import { DotMessagePipe } from '@dotcms/ui';
 
 import { DotCategoryFieldChipsComponent } from './components/dot-category-field-chips/dot-category-field-chips.component';
-import { DotCategoryFieldSidebarComponent } from './components/dot-category-field-sidebar/dot-category-field-sidebar.component';
+import { DotCategoryFieldDialogComponent } from './components/dot-category-field-dialog/dot-category-field-dialog.component';
 import { CategoriesService } from './services/categories.service';
 import { CategoryFieldStore } from './store/content-category-field.store';
 
@@ -39,7 +38,7 @@ import { CategoryFieldStore } from './store/content-category-field.store';
         NgClass,
         DotMessagePipe,
         DotCategoryFieldChipsComponent,
-        DotCategoryFieldSidebarComponent
+        DotCategoryFieldDialogComponent
     ],
     templateUrl: './dot-edit-content-category-field.component.html',
     styleUrl: './dot-edit-content-category-field.component.scss',
@@ -60,10 +59,7 @@ export class DotEditContentCategoryFieldComponent implements OnInit {
     readonly store = inject(CategoryFieldStore);
     readonly #form = inject(ControlContainer).control as FormGroup;
     readonly #injector = inject(Injector);
-    /**
-     * Disable the button to open the sidebar
-     */
-    $showCategoriesSidebar = signal(false);
+
     /**
      * The `field` variable is of type `DotCMSContentTypeField` and is a required input.
      * @description The variable represents a field of a DotCMS content type and is a required input.
@@ -75,11 +71,11 @@ export class DotEditContentCategoryFieldComponent implements OnInit {
      */
     contentlet = input.required<DotCMSContentlet>();
     /**
-     * The `$hasSelectedCategories` variable is a computed property that returns a boolean value.
+     * The `$hasConfirmedCategories` variable is a computed property that returns a boolean value.
      *
      * @returns {Boolean} - True if there are selected categories, false otherwise.
      */
-    $hasSelectedCategories = computed(() => !!this.store.hasSelectedCategories());
+    $hasSelectedCategories = computed(() => !!this.store.selected());
     /**
      * Getter to retrieve the category field control.
      *
@@ -100,7 +96,7 @@ export class DotEditContentCategoryFieldComponent implements OnInit {
         });
         effect(
             () => {
-                const categoryValues = this.store.selectedCategoriesValues();
+                const categoryValues = this.store.selected();
 
                 if (this.categoryFieldControl) {
                     this.categoryFieldControl.setValue(categoryValues);
@@ -112,19 +108,11 @@ export class DotEditContentCategoryFieldComponent implements OnInit {
         );
     }
     /**
-     * Open the categories sidebar.
+     * Open the categories dialog.
      *
      * @memberof DotEditContentCategoryFieldComponent
      */
-    openCategoriesSidebar(): void {
-        this.$showCategoriesSidebar.set(true);
-    }
-    /**
-     * Close the categories' sidebar.
-     *
-     * @memberof DotEditContentCategoryFieldComponent
-     */
-    closeCategoriesSidebar() {
-        this.$showCategoriesSidebar.set(false);
+    openCategoriesDialog(): void {
+        this.store.openDialog();
     }
 }

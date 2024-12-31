@@ -85,17 +85,17 @@ import { DEFAULT_PERSONA, WINDOW, HOST } from '../shared/consts';
 import { EDITOR_STATE, NG_CUSTOM_EVENTS, UVE_STATUS } from '../shared/enums';
 import {
     QUERY_PARAMS_MOCK,
-    PAGE_INODE_MOCK,
-    dotPageContainerStructureMock,
     URL_CONTENT_MAP_MOCK,
     EDIT_ACTION_PAYLOAD_MOCK,
     TREE_NODE_MOCK,
     newContentlet,
-    PAYLOAD_MOCK
+    PAYLOAD_MOCK,
+    UVE_PAGE_RESPONSE_MAP,
+    EMA_DRAG_ITEM_CONTENTLET_MOCK
 } from '../shared/mocks';
 import { ActionPayload, ContentTypeDragPayload } from '../shared/models';
 import { UVEStore } from '../store/dot-uve.store';
-import { SDK_EDITOR_SCRIPT_SOURCE } from '../utils';
+import { SDK_EDITOR_SCRIPT_SOURCE, TEMPORAL_DRAG_ITEM } from '../utils';
 
 global.URL.createObjectURL = jest.fn(
     () => 'blob:http://localhost:3000/12345678-1234-1234-1234-123456789012'
@@ -128,7 +128,7 @@ const IFRAME_MOCK = {
     }
 };
 
-const createRouting = (permissions: { canEdit: boolean; canRead: boolean }) =>
+const createRouting = () =>
     createRoutingFactory({
         component: EditEmaEditorComponent,
         imports: [RouterTestingModule, HttpClientTestingModule, SafeUrlPipe, ConfirmDialogModule],
@@ -260,215 +260,11 @@ const createRouting = (permissions: { canEdit: boolean; canRead: boolean }) =>
                 useValue: {
                     get({ language_id }) {
                         // We use the language_id to determine the response, use this to test different behaviors
-                        return {
-                            // Locked without unlock permission
-                            8: of({
-                                page: {
-                                    title: 'hello world',
-                                    inode: PAGE_INODE_MOCK,
-                                    identifier: '123',
-                                    ...permissions,
-                                    pageURI: 'page-one',
-                                    canEdit: true,
-                                    canLock: false,
-                                    isLocked: true,
-                                    lockedByUser: 'user'
-                                },
-                                site: {
-                                    identifier: '123'
-                                },
-                                viewAs: {
-                                    language: {
-                                        id: 2,
-                                        language: 'Spanish',
-                                        countryCode: 'ES',
-                                        languageCode: 'es',
-                                        country: 'España'
-                                    },
-                                    persona: DEFAULT_PERSONA
-                                },
-                                containers: dotPageContainerStructureMock
-                            }),
-                            //Locked  with unlock permission
-                            7: of({
-                                page: {
-                                    title: 'hello world',
-                                    inode: PAGE_INODE_MOCK,
-                                    identifier: '123',
-                                    ...permissions,
-                                    pageURI: 'page-one',
-                                    canEdit: true,
-                                    canLock: true,
-                                    locked: true,
-                                    lockedByName: 'user'
-                                },
-                                site: {
-                                    identifier: '123'
-                                },
-                                viewAs: {
-                                    language: {
-                                        id: 2,
-                                        language: 'Spanish',
-                                        countryCode: 'ES',
-                                        languageCode: 'es',
-                                        country: 'España'
-                                    },
-                                    persona: DEFAULT_PERSONA
-                                },
-                                containers: dotPageContainerStructureMock
-                            }),
-                            6: of({
-                                page: {
-                                    title: 'hello world',
-                                    inode: PAGE_INODE_MOCK,
-                                    identifier: '123',
-                                    ...permissions,
-                                    pageURI: 'page-one',
-                                    canEdit: false
-                                },
-                                site: {
-                                    identifier: '123'
-                                },
-                                viewAs: {
-                                    language: {
-                                        id: 6,
-                                        language: 'Portuguese',
-                                        countryCode: 'BR',
-                                        languageCode: 'br',
-                                        country: 'Brazil'
-                                    },
-                                    persona: DEFAULT_PERSONA
-                                },
-                                urlContentMap: URL_CONTENT_MAP_MOCK,
-                                containers: dotPageContainerStructureMock
-                            }),
-                            5: of({
-                                page: {
-                                    title: 'hello world',
-                                    inode: PAGE_INODE_MOCK,
-                                    identifier: 'i-have-a-running-experiment',
-                                    ...permissions,
-                                    pageURI: 'page-one',
-                                    rendered: '<div>New Content - Hello World</div>',
-                                    canEdit: true
-                                },
-                                site: {
-                                    identifier: '123'
-                                },
-                                viewAs: {
-                                    language: {
-                                        id: 4,
-                                        language: 'Russian',
-                                        countryCode: 'Ru',
-                                        languageCode: 'ru',
-                                        country: 'Russia'
-                                    },
-                                    persona: DEFAULT_PERSONA
-                                },
-                                urlContentMap: URL_CONTENT_MAP_MOCK,
-                                containers: dotPageContainerStructureMock
-                            }),
-                            4: of({
-                                page: {
-                                    title: 'hello world',
-                                    inode: PAGE_INODE_MOCK,
-                                    identifier: '123',
-                                    ...permissions,
-                                    pageURI: 'page-one',
-                                    rendered: '<div>New Content - Hello World</div>',
-                                    canEdit: true
-                                },
-                                site: {
-                                    identifier: '123'
-                                },
-                                viewAs: {
-                                    language: {
-                                        id: 4,
-                                        language: 'German',
-                                        countryCode: 'DE',
-                                        languageCode: 'de',
-                                        country: 'Germany'
-                                    },
-                                    persona: DEFAULT_PERSONA
-                                },
-                                urlContentMap: URL_CONTENT_MAP_MOCK,
-                                containers: dotPageContainerStructureMock
-                            }),
-                            3: of({
-                                page: {
-                                    title: 'hello world',
-                                    inode: PAGE_INODE_MOCK,
-                                    identifier: '123',
-                                    ...permissions,
-                                    pageURI: 'page-one',
-                                    rendered: '<div>hello world</div>',
-                                    canEdit: true
-                                },
-                                site: {
-                                    identifier: '123'
-                                },
-                                viewAs: {
-                                    language: {
-                                        id: 3,
-                                        language: 'German',
-                                        countryCode: 'DE',
-                                        languageCode: 'de',
-                                        country: 'Germany'
-                                    },
-                                    persona: DEFAULT_PERSONA
-                                },
-                                urlContentMap: URL_CONTENT_MAP_MOCK,
-                                containers: dotPageContainerStructureMock
-                            }),
-                            2: of({
-                                page: {
-                                    title: 'hello world',
-                                    inode: PAGE_INODE_MOCK,
-                                    identifier: '123',
-                                    ...permissions,
-                                    pageURI: 'page-one',
-                                    canEdit: true
-                                },
-                                site: {
-                                    identifier: '123'
-                                },
-                                viewAs: {
-                                    language: {
-                                        id: 2,
-                                        language: 'Spanish',
-                                        countryCode: 'ES',
-                                        languageCode: 'es',
-                                        country: 'España'
-                                    },
-                                    persona: DEFAULT_PERSONA
-                                },
-                                containers: dotPageContainerStructureMock
-                            }),
-                            1: of({
-                                page: {
-                                    title: 'hello world',
-                                    inode: PAGE_INODE_MOCK,
-                                    identifier: '123',
-                                    ...permissions,
-                                    pageURI: 'page-one'
-                                },
-                                site: {
-                                    identifier: '123'
-                                },
-                                viewAs: {
-                                    language: {
-                                        id: 1,
-                                        language: 'English',
-                                        countryCode: 'US',
-                                        languageCode: 'EN',
-                                        country: 'United States'
-                                    },
-                                    persona: DEFAULT_PERSONA
-                                },
-                                urlContentMap: URL_CONTENT_MAP_MOCK,
-                                containers: dotPageContainerStructureMock
-                            })
-                        }[language_id];
+                        return UVE_PAGE_RESPONSE_MAP[language_id];
+                    },
+                    getClientPage({ language_id }, _clientConfig) {
+                        // We use the language_id to determine the response, use this to test different behaviors
+                        return UVE_PAGE_RESPONSE_MAP[language_id];
                     },
                     save() {
                         return of({});
@@ -539,7 +335,7 @@ describe('EditEmaEditorComponent', () => {
         let router: Router;
         let dotPageApiService: DotPageApiService;
 
-        const createComponent = createRouting({ canEdit: true, canRead: true });
+        const createComponent = createRouting();
 
         const triggerCustomEvent = (
             element: DebugElement,
@@ -573,7 +369,7 @@ describe('EditEmaEditorComponent', () => {
 
             addMessageSpy = jest.spyOn(messageService, 'add');
 
-            store.load({
+            store.init({
                 clientHost: 'http://localhost:3000',
                 url: 'index',
                 language_id: '1',
@@ -626,7 +422,7 @@ describe('EditEmaEditorComponent', () => {
                 spectator.activatedRouteStub.setQueryParam('variantName', 'hello-there');
 
                 spectator.detectChanges();
-                store.load({
+                store.init({
                     url: 'index',
                     language_id: '5',
                     'com.dotmarketing.persona.id': DEFAULT_PERSONA.identifier,
@@ -648,7 +444,7 @@ describe('EditEmaEditorComponent', () => {
 
                 spectator.detectChanges();
 
-                store.load({
+                store.init({
                     url: 'index',
                     language_id: '5',
                     'com.dotmarketing.persona.id': DEFAULT_PERSONA.identifier
@@ -1616,8 +1412,14 @@ describe('EditEmaEditorComponent', () => {
 
             describe('drag and drop', () => {
                 describe('drag start', () => {
-                    it('should call the setEditorDragItem from the store for content-types', () => {
+                    it('should call the setEditorDragItem from the store for content-types and set the `dotcms/item` type ', () => {
                         const setEditorDragItemSpy = jest.spyOn(store, 'setEditorDragItem');
+                        const dataTransfer = {
+                            writable: false,
+                            value: {
+                                setData: jest.fn()
+                            }
+                        };
 
                         const target = {
                             target: {
@@ -1642,6 +1444,8 @@ describe('EditEmaEditorComponent', () => {
                             value: target.target
                         });
 
+                        Object.defineProperty(dragStart, 'dataTransfer', dataTransfer);
+
                         window.dispatchEvent(dragStart);
 
                         expect(setEditorDragItemSpy).toHaveBeenCalledWith({
@@ -1656,6 +1460,8 @@ describe('EditEmaEditorComponent', () => {
                                 move: false
                             }
                         });
+
+                        expect(dataTransfer.value.setData).toHaveBeenCalledWith('dotcms/item', '');
                     });
 
                     it('should call the setEditorDragItem from the store for contentlets', () => {
@@ -1678,6 +1484,11 @@ describe('EditEmaEditorComponent', () => {
                         const dragStart = new Event('dragstart');
 
                         Object.defineProperty(dragStart, 'target', {
+                            writable: false,
+                            value: target.target
+                        });
+
+                        Object.defineProperty(dragStart, 'data', {
                             writable: false,
                             value: target.target
                         });
@@ -1749,10 +1560,37 @@ describe('EditEmaEditorComponent', () => {
                             }
                         });
                     });
+
+                    it('should not call the setEditorDragItem if it is an invalid drag item', () => {
+                        const setEditorDragItemSpy = jest.spyOn(store, 'setEditorDragItem');
+                        const dragStart = new Event('dragstart');
+                        const target = {
+                            target: {
+                                dataset: {}
+                            }
+                        };
+                        const dataTransfer = {
+                            writable: false,
+                            value: {
+                                setData: jest.fn()
+                            }
+                        };
+
+                        Object.defineProperty(dragStart, 'dataTransfer', dataTransfer);
+                        Object.defineProperty(dragStart, 'target', {
+                            writable: false,
+                            value: target.target
+                        });
+
+                        window.dispatchEvent(dragStart);
+                        expect(setEditorDragItemSpy).not.toHaveBeenCalled();
+                        expect(dataTransfer.value.setData).toHaveBeenCalledWith('dotcms/item', '');
+                    });
                 });
 
                 describe('drag over', () => {
                     it('should prevent default to avoid opening files', () => {
+                        store.setEditorDragItem(TEMPORAL_DRAG_ITEM);
                         const dragOver = new Event('dragover');
                         const preventDefaultSpy = jest.spyOn(dragOver, 'preventDefault');
 
@@ -1798,47 +1636,24 @@ describe('EditEmaEditorComponent', () => {
                 });
 
                 describe('drag leave', () => {
-                    it('should set the editor state to OUT_OF_BOUNDS', () => {
-                        const setEditorStateSpy = jest.spyOn(store, 'setEditorState');
-
+                    const createDragLeaveEvent = () => {
                         const dragLeave = new Event('dragleave');
-
                         Object.defineProperties(dragLeave, {
-                            x: {
-                                value: 0
-                            },
-                            y: {
-                                value: 0
-                            },
-                            relatedTarget: {
-                                value: undefined // this is undefined when the mouse leaves the window
-                            }
+                            x: { value: 0 },
+                            y: { value: 0 },
+                            relatedTarget: { value: undefined } // this is undefined when the mouse leaves the window
                         });
 
+                        return dragLeave;
+                    };
+
+                    beforeEach(() => store.setEditorDragItem(EMA_DRAG_ITEM_CONTENTLET_MOCK));
+
+                    it('should reset editor properties', () => {
+                        const resetEditorPropertiesSpy = jest.spyOn(store, 'resetEditorProperties');
+                        const dragLeave = createDragLeaveEvent();
                         window.dispatchEvent(dragLeave);
-
-                        expect(setEditorStateSpy).toHaveBeenCalledWith(EDITOR_STATE.OUT_OF_BOUNDS);
-                    });
-                    it('should not set the editor state to OUT_OF_BOUNDS when the leave is from an element in the window', () => {
-                        const setEditorStateSpy = jest.spyOn(store, 'setEditorState');
-
-                        const dragLeave = new Event('dragleave');
-
-                        Object.defineProperties(dragLeave, {
-                            x: {
-                                value: 900
-                            },
-                            y: {
-                                value: 1200
-                            },
-                            relatedTarget: {
-                                value: {}
-                            }
-                        });
-
-                        window.dispatchEvent(dragLeave);
-
-                        expect(setEditorStateSpy).not.toHaveBeenCalled();
+                        expect(resetEditorPropertiesSpy).toHaveBeenCalled();
                     });
                 });
 
@@ -1879,7 +1694,7 @@ describe('EditEmaEditorComponent', () => {
                         });
                     });
 
-                    it('should set the editor to DRAGGING if there is dragItem and the state is OUT_OF_BOUNDS', () => {
+                    it('should set the editor to DRAGGING if there is dragItem and the state is IDLE', () => {
                         store.setEditorDragItem({
                             baseType: 'dotAsset',
                             contentType: 'dotAsset',
@@ -1888,7 +1703,7 @@ describe('EditEmaEditorComponent', () => {
                             }
                         }); // Simulate drag start
 
-                        store.setEditorState(EDITOR_STATE.OUT_OF_BOUNDS); // Simulate drag leave
+                        store.setEditorState(EDITOR_STATE.IDLE); // Simulate drag leave
 
                         const setEditorStateSpy = jest.spyOn(store, 'setEditorState');
 
@@ -1902,6 +1717,25 @@ describe('EditEmaEditorComponent', () => {
                         window.dispatchEvent(dragEnter);
 
                         expect(setEditorStateSpy).toHaveBeenCalledWith(EDITOR_STATE.DRAGGING);
+                    });
+
+                    it('should set ignore drag events if the file type is `dotcms/item`', () => {
+                        const setEditorDragItemSpy = jest.spyOn(store, 'setEditorDragItem');
+                        const setEditorStateSpy = jest.spyOn(store, 'setEditorState');
+                        const dragEnter = new Event('dragenter');
+
+                        Object.defineProperty(dragEnter, 'dataTransfer', {
+                            writable: false,
+                            value: {
+                                types: ['dotcms/item']
+                            }
+                        });
+
+                        window.dispatchEvent(dragEnter);
+
+                        expect(store.state()).toBe(EDITOR_STATE.IDLE);
+                        expect(setEditorDragItemSpy).not.toHaveBeenCalled();
+                        expect(setEditorStateSpy).not.toHaveBeenCalled();
                     });
                 });
 
@@ -2495,6 +2329,8 @@ describe('EditEmaEditorComponent', () => {
             });
 
             describe('scroll inside iframe', () => {
+                beforeEach(() => store.setEditorDragItem(TEMPORAL_DRAG_ITEM));
+
                 it('should emit postMessage and change state to Scroll', () => {
                     const dragOver = new Event('dragover');
 
@@ -2575,7 +2411,9 @@ describe('EditEmaEditorComponent', () => {
             });
 
             describe('DOM', () => {
-                it("should not show a loader when the editor state is not 'loading'", () => {
+                it('should not show a loader when client is ready and UVE is not loading', () => {
+                    store.setIsClientReady(true);
+                    store.setUveStatus(UVE_STATUS.LOADED);
                     spectator.detectChanges();
 
                     const progressbar = spectator.query(byTestId('progress-bar'));
@@ -2583,15 +2421,25 @@ describe('EditEmaEditorComponent', () => {
                     expect(progressbar).toBeNull();
                 });
 
-                it('should show a loader when the UVE is loading', () => {
-                    store.setUveStatus(UVE_STATUS.LOADING);
-
+                it('should show a loader when the client is not ready', () => {
+                    store.setIsClientReady(false);
                     spectator.detectChanges();
 
                     const progressbar = spectator.query(byTestId('progress-bar'));
 
                     expect(progressbar).not.toBeNull();
                 });
+
+                it('should show a loader when the client is ready but UVE is Loading', () => {
+                    store.setIsClientReady(true);
+                    store.setUveStatus(UVE_STATUS.LOADING); // Almost impossible case but we have it as a fallback
+                    spectator.detectChanges();
+
+                    const progressbar = spectator.query(byTestId('progress-bar'));
+
+                    expect(progressbar).not.toBeNull();
+                });
+
                 it('iframe should have the correct src when is HEADLESS', () => {
                     spectator.detectChanges();
 
@@ -2607,7 +2455,7 @@ describe('EditEmaEditorComponent', () => {
                         jest.useFakeTimers(); // Mock the timers
                         spectator.detectChanges();
 
-                        store.load({
+                        store.init({
                             url: 'index',
                             language_id: '3',
                             'com.dotmarketing.persona.id': DEFAULT_PERSONA.identifier
@@ -2647,7 +2495,7 @@ describe('EditEmaEditorComponent', () => {
 
                         iframe.nativeElement.contentWindow.scrollTo(0, 100); //Scroll down
 
-                        store.load({
+                        store.init({
                             url: 'index',
                             language_id: '4',
                             'com.dotmarketing.persona.id': DEFAULT_PERSONA.identifier
@@ -2747,7 +2595,7 @@ describe('EditEmaEditorComponent', () => {
 
                     const url = "/ultra-cool-url-that-doesn't-exist";
 
-                    store.load({
+                    store.init({
                         url,
                         language_id: '5',
                         'com.dotmarketing.persona.id': DEFAULT_PERSONA.identifier
@@ -2786,7 +2634,7 @@ describe('EditEmaEditorComponent', () => {
                     spectator.activatedRouteStub.setQueryParam('variantName', 'hello-there');
 
                     spectator.detectChanges();
-                    store.load({
+                    store.init({
                         url: 'index',
                         language_id: '5',
                         'com.dotmarketing.persona.id': DEFAULT_PERSONA.identifier,
@@ -2907,6 +2755,79 @@ describe('EditEmaEditorComponent', () => {
 
                     expect(saveContentletSpy).not.toHaveBeenCalled();
                     expect(setEditorState).toHaveBeenCalledWith(EDITOR_STATE.IDLE);
+                });
+            });
+
+            describe('CUSTOMER ACTIONS', () => {
+                describe('CLIENT_READY', () => {
+                    it('should set client is ready when not extra configuration is send', () => {
+                        const setIsClientReadySpy = jest.spyOn(store, 'setIsClientReady');
+
+                        window.dispatchEvent(
+                            new MessageEvent('message', {
+                                origin: HOST,
+                                data: {
+                                    action: CUSTOMER_ACTIONS.CLIENT_READY
+                                }
+                            })
+                        );
+
+                        expect(setIsClientReadySpy).toHaveBeenCalledWith(true);
+                    });
+
+                    it('should set client GraphQL configuration and call the reload', () => {
+                        const setClientConfigurationSpy = jest.spyOn(
+                            store,
+                            'setClientConfiguration'
+                        );
+                        const reloadSpy = jest.spyOn(store, 'reload');
+
+                        const config = {
+                            params: {},
+                            query: '{ query: { hello } }'
+                        };
+
+                        window.dispatchEvent(
+                            new MessageEvent('message', {
+                                origin: HOST,
+                                data: {
+                                    action: CUSTOMER_ACTIONS.CLIENT_READY,
+                                    payload: config
+                                }
+                            })
+                        );
+
+                        expect(setClientConfigurationSpy).toHaveBeenCalledWith(config);
+                        expect(reloadSpy).toHaveBeenCalled();
+                    });
+
+                    it('should set client PAGEAPI configuration and call the reload', () => {
+                        const setClientConfigurationSpy = jest.spyOn(
+                            store,
+                            'setClientConfiguration'
+                        );
+                        const reloadSpy = jest.spyOn(store, 'reload');
+
+                        const config = {
+                            params: {
+                                depth: '1'
+                            },
+                            query: ''
+                        };
+
+                        window.dispatchEvent(
+                            new MessageEvent('message', {
+                                origin: HOST,
+                                data: {
+                                    action: CUSTOMER_ACTIONS.CLIENT_READY,
+                                    payload: config
+                                }
+                            })
+                        );
+
+                        expect(setClientConfigurationSpy).toHaveBeenCalledWith(config);
+                        expect(reloadSpy).toHaveBeenCalled();
+                    });
                 });
             });
         });

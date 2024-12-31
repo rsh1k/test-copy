@@ -1,5 +1,6 @@
 package com.dotcms.enterprise.publishing.remote.bundler;
 
+import com.dotcms.LicenseTestUtil;
 import com.dotcms.contenttype.business.StoryBlockAPI;
 import com.dotcms.contenttype.model.field.Field;
 import com.dotcms.contenttype.model.field.ImageField;
@@ -61,7 +62,7 @@ import com.dotmarketing.portlets.contentlet.model.Contentlet;
 import com.dotmarketing.portlets.contentlet.model.IndexPolicy;
 import com.dotmarketing.portlets.folders.model.Folder;
 import com.dotmarketing.portlets.htmlpageasset.model.HTMLPageAsset;
-import com.dotmarketing.portlets.languagesmanager.business.LanguageDataGen;
+import com.dotmarketing.portlets.languagesmanager.business.UniqueLanguageDataGen;
 import com.dotmarketing.portlets.languagesmanager.model.Language;
 import com.dotmarketing.portlets.links.model.Link;
 import com.dotmarketing.portlets.rules.RuleDataGen;
@@ -126,6 +127,7 @@ public class DependencyBundlerTest {
     public static void prepare() throws Exception {
         //Setting web app environment
         IntegrationTestInitService.getInstance().init();
+        LicenseTestUtil.getLicense();
 
         final Map<String, List<ManifestItem>> excludeSystemFolderMap = new HashMap<>();
         excludeSystemFolderMap.put(EXCLUDE_SYSTEM_FOLDER_HOST,
@@ -201,7 +203,7 @@ public class DependencyBundlerTest {
         final StoryBlockAPI storyBlockAPI = APILocator.getStoryBlockAPI();
         final ContentletAPI contentletAPI = APILocator.getContentletAPI();
         final Host site = new SiteDataGen().nextPersisted();
-        final Language language = new LanguageDataGen().nextPersisted();
+        final Language language = new UniqueLanguageDataGen().nextPersisted();
         final ContentType contentType = new ContentTypeDataGen().host(site).nextPersisted();
         final ContentType referencedContentType = new ContentTypeDataGen().host(site).nextPersisted();
         final Field storyBlockField =
@@ -238,7 +240,7 @@ public class DependencyBundlerTest {
             throws DotDataException, DotSecurityException {
 
         final Host host = createHostWithDependencies();
-        final Language language = new LanguageDataGen().nextPersisted();
+        final Language language = new UniqueLanguageDataGen().nextPersisted();
 
         final TestData contentTypeWithDependencies = createContentTypeWithDependencies();
         final ContentType contentType = (ContentType) contentTypeWithDependencies.assetsToAddInBundle;
@@ -586,7 +588,7 @@ public class DependencyBundlerTest {
     private static Collection<TestData> createContentTestCase()
             throws DotDataException, DotSecurityException, IOException {
         final Host host = new SiteDataGen().nextPersisted();
-        final Language language = new LanguageDataGen().nextPersisted();
+        final Language language = new UniqueLanguageDataGen().nextPersisted();
         final ContentType contentType = new ContentTypeDataGen().host(host).nextPersisted();
 
         final Contentlet contentlet = new ContentletDataGen(contentType.id())
@@ -654,7 +656,7 @@ public class DependencyBundlerTest {
 
         final WorkflowScheme systemWorkflowScheme = APILocator.getWorkflowAPI().findSystemWorkflowScheme();
 
-        final Language imageFileLanguage = new LanguageDataGen().nextPersisted();
+        final Language imageFileLanguage = new UniqueLanguageDataGen().nextPersisted();
         final Folder imageFolder = new FolderDataGen().site(host).nextPersisted();
         File tempFile = File.createTempFile("contentWithImageBundleTest", ".jpg");
         URL url = FocalPointAPITest.class.getResource("/images/test.jpg");
@@ -765,12 +767,19 @@ public class DependencyBundlerTest {
 
                 new TestData(contentletWithRelationship, contentletWithRelationshipIncludes, excludeSystemFolder,
                         filterDescriptorAllDependencies, "Contentlet with Relationship and filterDescriptorAllDependencies"),
-                new TestData(contentletWithRelationship, Map.of(contentTypeParent, list(relationship), contentletWithRelationship, list(relationship)), contentletWithRelationshipExcludes, filterDescriptorNotDependencies, "Contentlet with Relationship and filterDescriptorNotDependencies"),
+                new TestData(contentletWithRelationship, Map.of(contentTypeParent, list(relationship), contentletWithRelationship, list(relationship)), contentletWithRelationshipExcludes,
+                        Map.of(contentTypeChild.getManifestInfo().id(),
+                                list(getDependencyReason(relationship))),
+                        filterDescriptorNotDependencies,
+                        "Contentlet with Relationship and filterDescriptorNotDependencies"),
                 new TestData(contentletWithRelationship, Map.of(contentletWithRelationship, list(host, contentTypeParent, language, relationship), contentTypeParent, list(systemWorkflowScheme, relationship), relationship, list(contentTypeChild)),
                         Map.of(FILTER_EXCLUDE_REASON, list(), EXCLUDE_SYSTEM_FOLDER_HOST, list(systemFolder)),
                         filterDescriptorNotRelationship, "Contentlet with Relationship and filterDescriptorNotRelationship"),
                 new TestData(contentletWithRelationship, Map.of(contentletWithRelationship, list(relationship), contentTypeParent, list(relationship)), contentletWithRelationshipExcludes,
-                        filterDescriptorNotDependenciesRelationship, "Contentlet with Relationship and filterDescriptorNotDependenciesRelationship"),
+                        Map.of(contentTypeChild.getManifestInfo().id(),
+                                list(getDependencyReason(relationship))),
+                        filterDescriptorNotDependenciesRelationship,
+                        "Contentlet with Relationship and filterDescriptorNotDependenciesRelationship"),
 
                 new TestData(contentWithCategory, contentWithCategoryIncludes, excludeSystemFolder,
                         filterDescriptorAllDependencies, "Contentlet with Category and filterDescriptorAllDependencies"),
@@ -817,16 +826,16 @@ public class DependencyBundlerTest {
                 new TestData(rule, new HashMap<>(), Map.of(FILTER_EXCLUDE_REASON, list(host)), filterDescriptorNotDependenciesRelationship, "Page with filterDescriptorNotDependenciesRelationship"),
 
                 new TestData(ruleWithPage, Map.of(ruleWithPage, list(htmlPageAsset)), new HashMap<>(), filterDescriptorAllDependencies, "Rule with page and filterDescriptorAllDependencies"),
-                new TestData(ruleWithPage, new HashMap<>(), Map.of(FILTER_EXCLUDE_REASON, list(htmlPageAsset)), filterDescriptorNotDependencies, "Rule with page and filterDescriptorAllDependencies"),
-                new TestData(ruleWithPage, Map.of(ruleWithPage, list(htmlPageAsset)), new HashMap<>(), filterDescriptorNotRelationship, "Rule with page and filterDescriptorAllDependencies"),
-                new TestData(ruleWithPage, new HashMap<>(), Map.of(FILTER_EXCLUDE_REASON, list(htmlPageAsset)), filterDescriptorNotDependenciesRelationship, "Rule with page and filterDescriptorAllDependencies")
+                new TestData(ruleWithPage, new HashMap<>(), Map.of(FILTER_EXCLUDE_REASON, list(htmlPageAsset)), filterDescriptorNotDependencies, "Rule with page and filterDescriptorNotDependencies"),
+                new TestData(ruleWithPage, Map.of(ruleWithPage, list(htmlPageAsset)), new HashMap<>(), filterDescriptorNotRelationship, "Rule with page and filterDescriptorNotRelationship"),
+                new TestData(ruleWithPage, new HashMap<>(), Map.of(FILTER_EXCLUDE_REASON, list(htmlPageAsset)), filterDescriptorNotDependenciesRelationship, "Rule with page and filterDescriptorNotDependenciesRelationship")
 
         );
 
     }
 
     private static Collection<TestData> createLanguageTestCase() {
-        final Language language = new LanguageDataGen().nextPersisted();
+        final Language language = new UniqueLanguageDataGen().nextPersisted();
 
         return list(
                 new TestData(language, new HashMap<>(), new HashMap<>(), filterDescriptorAllDependencies, "Language with filterDescriptorAllDependencies"),
@@ -1318,13 +1327,23 @@ public class DependencyBundlerTest {
                         EXCLUDE_SYSTEM_FOLDER_HOST, list(systemFolder)), filterDescriptorNotDependenciesRelationship, "Contentype with Category and filterDescriptorNotDependenciesRelationship"),
 
                 new TestData(contentTypeParent, contentTypeParentIncludes, excludeSystemFolder, filterDescriptorAllDependencies, "Contentype with Relationship and filterDescriptorAllDependencies"),
-                new TestData(contentTypeParent, Map.of(contentTypeParent, list(relationship)), Map.of(FILTER_EXCLUDE_REASON, list(host, systemWorkflowScheme, contentTypeChild),
-                        EXCLUDE_SYSTEM_FOLDER_HOST, list(systemFolder)), filterDescriptorNotDependencies, "Contentype with Relationship and filterDescriptorNotDependencies"),
+                new TestData(contentTypeParent, Map.of(contentTypeParent, list(relationship)),
+                        Map.of(FILTER_EXCLUDE_REASON, list(host, systemWorkflowScheme, contentTypeChild),
+                            EXCLUDE_SYSTEM_FOLDER_HOST, list(systemFolder)),
+                        Map.of(contentTypeChild.getManifestInfo().id(),
+                                list(getDependencyReason(relationship))),
+                        filterDescriptorNotDependencies,
+                        "Contentype with Relationship and filterDescriptorNotDependencies"),
                 new TestData(contentTypeParent, Map.of(contentTypeParent, list(host, systemWorkflowScheme, relationship), relationship, list(contentTypeChild)),
                         Map.of(FILTER_EXCLUDE_REASON, list(), EXCLUDE_SYSTEM_FOLDER_HOST, list(systemFolder)),
                         filterDescriptorNotRelationship, "Contentype with Relationship and filterDescriptorNotRelationship"),
-                new TestData(contentTypeParent, Map.of(contentTypeParent, list(relationship)), Map.of(FILTER_EXCLUDE_REASON, list(host, systemWorkflowScheme, contentTypeChild),
-                        EXCLUDE_SYSTEM_FOLDER_HOST, list(systemFolder)), filterDescriptorNotDependenciesRelationship, "Contentype with Relationship and filterDescriptorNotDependenciesRelationship")
+                new TestData(contentTypeParent, Map.of(contentTypeParent, list(relationship)),
+                        Map.of(FILTER_EXCLUDE_REASON, list(host, systemWorkflowScheme, contentTypeChild),
+                            EXCLUDE_SYSTEM_FOLDER_HOST, list(systemFolder)),
+                        Map.of(contentTypeChild.getManifestInfo().id(),
+                                list(getDependencyReason(relationship))),
+                        filterDescriptorNotDependenciesRelationship,
+                        "Contentype with Relationship and filterDescriptorNotDependenciesRelationship")
         );
     }
 
@@ -1436,6 +1455,12 @@ public class DependencyBundlerTest {
 
     }
 
+    private static String getDependencyReason(final ManifestItem asset) {
+        return String.format(
+                "Dependency from: ID: %s Title: %s", asset.getManifestInfo().id(),
+                asset.getManifestInfo().title());
+    }
+
     @DataProvider(format = "%m: %p[0]")
     public static Object[] configs() throws Exception {
         return new ModDateTestData[] {
@@ -1536,17 +1561,41 @@ public class DependencyBundlerTest {
 
             } else {
                 final String excludeByOperation = FILTER_EXCLUDE_BY_OPERATION + modDateTestData.operation;
-                manifestLines.addExcludes(Map.of(excludeByOperation,
-                        list(host, language, contentTypeParent, contentTypeChild, relationship,
-                                APILocator.getWorkflowAPI().findSystemWorkflowScheme())));
+                final List<ManifestItem> parentExcludeList = list(
+                        host, language, contentTypeParent, relationship);
+                final List<ManifestItem> childExcludeList = list(
+                        language, contentTypeChild);
+                manifestLines.addExcludes(
+                        Map.of(excludeByOperation, parentExcludeList), contentParent);
+                manifestLines.addExcludes(
+                        Map.of(excludeByOperation, childExcludeList), contentletChild);
 
                 final List<? extends Serializable> generalLangVarDependencies = list(
                         PublisherAPIImplTest.getLanguageVariablesContentType(),
                         APILocator.getWorkflowAPI().findSystemWorkflowScheme());
 
                 Stream.concat(PublisherAPIImplTest.getLanguagesVariableDependencies(),
-                        languageVariables, generalLangVarDependencies).forEach(asset ->
-                        manifestLines.addExclude((ManifestItem) asset, excludeByOperation));
+                        languageVariables, generalLangVarDependencies).forEach(asset -> {
+                    final String dependencyReason = asset instanceof Contentlet &&
+                            !languageVariables.isEmpty() && languageVariables.contains((Contentlet) asset) ?
+                            "Added Automatically by dotCMS" :
+                            getDependencyReason(!languageVariables.isEmpty() ?
+                                    languageVariables.get(0) : (ManifestItem) asset);
+                    manifestLines.addExclude((ManifestItem) asset, dependencyReason, excludeByOperation);
+                });
+
+                if (!languageVariables.isEmpty()) {
+                    manifestLines.addExclude(APILocator.getFolderAPI().findSystemFolder(),
+                            getDependencyReason(languageVariables.get(0)),
+                            EXCLUDE_SYSTEM_FOLDER_HOST);
+                    manifestLines.addExclude(APILocator.getHostAPI().findSystemHost(),
+                            getDependencyReason(languageVariables.get(0).getContentType()),
+                            EXCLUDE_SYSTEM_FOLDER_HOST);
+                    manifestLines.addExclude(
+                            APILocator.getWorkflowAPI().findSystemWorkflowScheme(),
+                            getDependencyReason(languageVariables.get(0).getContentType()),
+                            excludeByOperation);
+                }
             }
 
             dependencies.add(contentParent);
@@ -1559,11 +1608,14 @@ public class DependencyBundlerTest {
 
                 manifestLines.addDependencies(Map.of(contentletChild, list(language, contentTypeChild)));
             } else if (modDateTestData.operation == Operation.PUBLISH) {
-                manifestLines.addExclude(contentletChild, "Excluded by mod_date");
+                manifestLines.addExclude(contentletChild,
+                        getDependencyReason(relationship),"Excluded by mod_date");
 
                 manifestLines.addDependencies(Map.of(contentletChild, list(language, contentTypeChild)));
             } else {
-                manifestLines.addExclude(contentletChild, FILTER_EXCLUDE_BY_OPERATION + modDateTestData.operation);
+                manifestLines.addExclude(contentletChild,
+                        getDependencyReason(relationship),
+                        FILTER_EXCLUDE_BY_OPERATION + modDateTestData.operation);
             }
 
             manifestBuilder.close();
@@ -1604,7 +1656,7 @@ public class DependencyBundlerTest {
         final Contentlet contentParent = (Contentlet) relationShip.get("contentParent");
 
         final Contentlet contentletChildAnotherLang = ContentletDataGen.checkout(contentletChild);
-        final Language anotherLang = new LanguageDataGen().nextPersisted();
+        final Language anotherLang = new UniqueLanguageDataGen().nextPersisted();
         contentletChildAnotherLang.setLanguageId(anotherLang.getId());
         ContentletDataGen.checkin(contentletChildAnotherLang);
 
@@ -1766,7 +1818,7 @@ public class DependencyBundlerTest {
 
     private Map<String, Object> createRelationShip() {
         final Host host = new SiteDataGen().nextPersisted();
-        final Language language = new LanguageDataGen().nextPersisted();
+        final Language language = new UniqueLanguageDataGen().nextPersisted();
 
         final ContentType contentTypeParent =  new ContentTypeDataGen()
                 .host(host)
@@ -2358,6 +2410,7 @@ public class DependencyBundlerTest {
         Map<ManifestItem, Collection<ManifestItem>> dependenciesToAssert;
         FilterDescriptor filterDescriptor;
         Map<String, List<ManifestItem>> excludes;
+        Map<String, List<String>> evaluateReasons;
         String message;
 
         public TestData(
@@ -2373,11 +2426,24 @@ public class DependencyBundlerTest {
                 final Map<ManifestItem, Collection<ManifestItem>> dependenciesToAssert,
                 final Map<String, List<ManifestItem>> excludes,
                 final FilterDescriptor filterDescriptor,
-                final String message)  {
+                final String message) {
+            this(assetsToAddInBundle, dependenciesToAssert, excludes,
+                    null, filterDescriptor, message);
+        }
+
+        public TestData(
+            final ManifestItem assetsToAddInBundle,
+            final Map<ManifestItem, Collection<ManifestItem>> dependenciesToAssert,
+            final Map<String, List<ManifestItem>> excludes,
+            final Map<String, List<String>> evaluateReasons,
+            final FilterDescriptor filterDescriptor,
+            final String message)  {
+
             this.assetsToAddInBundle = assetsToAddInBundle;
             this.filterDescriptor = filterDescriptor;
             this.dependenciesToAssert = dependenciesToAssert;
             this.excludes = excludes;
+            this.evaluateReasons = evaluateReasons;
             this.message = message;
         }
 
@@ -2395,7 +2461,24 @@ public class DependencyBundlerTest {
             manifestItemsMap.addDependencies(dependenciesToAssert);
 
             if (excludes != null) {
-                manifestItemsMap.addExcludes(excludes);
+                if (evaluateReasons == null) {
+                    manifestItemsMap.addExcludes(excludes, assetManifestItem);
+                } else {
+                    for (final Map.Entry<String, List<ManifestItem>> excludeEntry : excludes.entrySet()) {
+                        final String excludeReason = excludeEntry.getKey();
+                        final List<ManifestItem> excludeList = excludeEntry.getValue();
+                        for (final ManifestItem excludeItem : excludeList) {
+                            final String itemId = excludeItem.getManifestInfo().id();
+                            final List<String> evaluateReasonList = evaluateReasons
+                                    .getOrDefault(itemId,
+                                            list(getDependencyReason(assetManifestItem)));
+                            for (final String evaluateReason : evaluateReasonList) {
+                                manifestItemsMap.addExclude(excludeItem,
+                                        evaluateReason, excludeReason);
+                            }
+                        }
+                    }
+                }
             }
 
             return manifestItemsMap;

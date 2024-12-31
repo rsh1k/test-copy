@@ -111,6 +111,7 @@ public class FileViewStrategy extends AbstractTransformStrategy<Contentlet> {
         //This does always assume we're getting a fileAsset we don't want to miss a dotAsset
         final Contentlet incoming = fileAsContentOptional.get();
         if(incoming.isDotAsset()){
+            incoming.setProperty(FileAssetAPI.BINARY_FIELD, Try.of(()->incoming.getBinary("asset")).getOrNull());
             fileAsset = convertToFileAsset(incoming, fileAssetAPI);
         } else {
             fileAsset = fileAssetAPI.fromContentlet(incoming);
@@ -174,7 +175,7 @@ public class FileViewStrategy extends AbstractTransformStrategy<Contentlet> {
      * @return the fileAsset
      * @throws DotDataException if the content type is not found
      */
-    private  FileAsset convertToFileAsset(final Contentlet dotAsset, final FileAssetAPI api) throws DotDataException {
+    public static FileAsset convertToFileAsset(final Contentlet dotAsset, final FileAssetAPI api) throws DotDataException {
         final ContentType contentType =
                Try.of(()->APILocator.getContentTypeAPI(APILocator.systemUser()).find("FileAsset")).getOrNull();
 

@@ -1,9 +1,10 @@
 import { environment } from '../../../../environments/environment';
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 
-import { BlogsComponent } from '../../../components/blogs/blogs.component';
-import { DestinationsComponent } from '../../../components/destinations/destinations.component';
+
+import { DestinationsComponent } from './destinations/destinations.component';
 import { NgOptimizedImage } from '@angular/common';
+import { BlogsComponent } from './blogs/blogs.component';
 
 @Component({
   selector: 'app-footer',
@@ -22,7 +23,7 @@ import { NgOptimizedImage } from '@angular/common';
           opportunities with free benefits and bonuses for registered clients.
         </p>
         <img
-          [ngSrc]="'/dA/2f383e7fa6/fileAsset/logo.png'"
+          ngSrc="/dA/82da90eb04/fileAsset/logo.png"
           height="53"
           width="221"
           alt="TravelLux logo"

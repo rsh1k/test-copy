@@ -4,12 +4,15 @@ full_build_test: &full_build_test
   - '.nvmrc'
 
 backend: &backend
-  - '.github/workflows/maven-cicd-pipeline.yml'
+  - '.github/workflows/cicd_comp_*.yml'
+  - '.github/workflows/cicd_1-pr.yml'
+  - '.github/actions/core-cicd/**/action.yml'
   - 'bom/**'
   - 'build-parent/**'
   - 'core-web/pom.xml'
   - 'dotCMS/src/main/webapp/html/**/!(*.{css,js})'
   - 'dotcms-postman/**'
+  - 'e2e/**'
   - 'dotCMS/!(src/main/webapp/html/)**'
   - 'dotcms-integration/**'
   - 'independent-projects/**'
@@ -30,6 +33,9 @@ cli: &cli
   - 'tools/dotcms-cli/**'
   - *full_build_test
   - *backend
+
+sdk_libs:
+  - 'core-web/libs/sdk/**'  
 
 jvm_unit_test:
   - *backend

@@ -17,7 +17,7 @@ import {
     CATEGORY_HIERARCHY_MOCK,
     CATEGORY_LEVEL_1,
     CATEGORY_LEVEL_2,
-    SELECTED_LIST_MOCK
+    MOCK_SELECTED_CATEGORIES_OBJECT
 } from '../mocks/category-field.mocks';
 import { DotCategoryFieldKeyValueObj } from '../models/dot-category-field.models';
 import { CategoriesService } from '../services/categories.service';
@@ -50,30 +50,20 @@ describe('CategoryFieldStore', () => {
     it('should initialize with default state', () => {
         expect(store.categories()).toEqual(EMPTY_ARRAY);
         expect(store.keyParentPath()).toEqual(EMPTY_ARRAY);
-        expect(store.state()).toEqual(ComponentStatus.IDLE);
+        expect(store.state()).toEqual(ComponentStatus.INIT);
         expect(store.selected()).toEqual(EMPTY_ARRAY);
+        expect(store.dialog.selected()).toEqual(EMPTY_ARRAY);
+        expect(store.dialog.state()).toEqual('closed');
         expect(store.mode()).toEqual('list');
     });
 
     describe('withMethods', () => {
         it('should set the correct rootCategoryInode and categoriesValue', () => {
             const expectedCategoryValues: DotCategoryFieldKeyValueObj[] = [
-                {
-                    key: '1f208488057007cedda0e0b5d52ee3b3',
-                    value: 'Cleaning Supplies',
-                    inode: '111111',
-                    path: 'Cleaning Supplies'
-                },
-                {
-                    key: 'cb83dc32c0a198fd0ca427b3b587f4ce',
-                    value: 'Doors & Windows',
-                    inode: '22222',
-                    path: 'Cleaning Supplies'
-                }
+                ...MOCK_SELECTED_CATEGORIES_OBJECT
             ];
 
             store.load({ field: CATEGORY_FIELD_MOCK, contentlet: CATEGORY_FIELD_CONTENTLET_MOCK });
-
             expect(store.selected()).toEqual(expectedCategoryValues);
             expect(store.rootCategoryInode()).toEqual(CATEGORY_FIELD_MOCK.values);
         });
@@ -125,13 +115,91 @@ describe('CategoryFieldStore', () => {
         });
     });
 
-    describe('withComputed', () => {
-        it('should show item after load the values', () => {
-            const expectedSelectedValues = SELECTED_LIST_MOCK;
+    describe('Dialog', () => {
+        beforeEach(() => {
             store.load({ field: CATEGORY_FIELD_MOCK, contentlet: CATEGORY_FIELD_CONTENTLET_MOCK });
-            expect(store.selectedCategoriesValues().sort()).toEqual(expectedSelectedValues.sort());
+            store.openDialog();
+        });
 
-            expect(store.categoryList()).toEqual(EMPTY_ARRAY);
+        describe('openDialog', () => {
+            it('should set the dialog state to open and copy selected items', () => {
+                expect(store.dialog.state()).toBe('open');
+                expect(store.dialog.selected()).toEqual(MOCK_SELECTED_CATEGORIES_OBJECT);
+            });
+        });
+
+        describe('closeDialog', () => {
+            it('should set the dialog state to closed and clear selected items', () => {
+                store.closeDialog();
+                expect(store.dialog.state()).toBe('closed');
+                expect(store.dialog.selected()).toEqual(EMPTY_ARRAY);
+                expect(store.dialog.selected()).toEqual(EMPTY_ARRAY);
+            });
+        });
+
+        describe('updateSelected', () => {
+            it('should add a new item to the dialog selected items', () => {
+                expect(store.dialog.selected().length).toBe(MOCK_SELECTED_CATEGORIES_OBJECT.length);
+
+                const newItem: DotCategoryFieldKeyValueObj = {
+                    key: CATEGORY_LEVEL_2[0].key,
+                    value: CATEGORY_LEVEL_2[0].categoryName,
+                    inode: CATEGORY_LEVEL_2[0].inode,
+                    path: CATEGORY_LEVEL_2[0].categoryName
+                };
+                const selectedKeys = [
+                    ...MOCK_SELECTED_CATEGORIES_OBJECT.map((item) => item.key),
+                    newItem.key
+                ];
+                store.updateSelected(selectedKeys, newItem);
+
+                const expectedItems = [...MOCK_SELECTED_CATEGORIES_OBJECT, newItem];
+
+                expect(store.dialog.selected()).toEqual(expectedItems);
+                expect(store.dialog.selected().length).toBe(
+                    MOCK_SELECTED_CATEGORIES_OBJECT.length + 1
+                );
+            });
+        });
+
+        describe('applyDialogSelection', () => {
+            it("should update the store's selected items with the dialog's selected items", () => {
+                const newItem: DotCategoryFieldKeyValueObj = {
+                    key: CATEGORY_LEVEL_2[0].key,
+                    value: CATEGORY_LEVEL_2[0].categoryName,
+                    inode: CATEGORY_LEVEL_2[0].inode,
+                    path: CATEGORY_LEVEL_2[0].categoryName
+                };
+
+                store.updateSelected(
+                    [...MOCK_SELECTED_CATEGORIES_OBJECT.map((item) => item.key), newItem.key],
+                    newItem
+                );
+                store.applyDialogSelection();
+
+                expect(store.selected()).toEqual([...MOCK_SELECTED_CATEGORIES_OBJECT, newItem]);
+            });
+        });
+
+        describe('removeSelected', () => {
+            it('should remove a single item by key from the dialog selected items', () => {
+                store.removeSelected(MOCK_SELECTED_CATEGORIES_OBJECT[0].key);
+
+                expect(store.dialog.selected().length).toBe(
+                    MOCK_SELECTED_CATEGORIES_OBJECT.length - 1
+                );
+                expect(
+                    store.dialog
+                        .selected()
+                        .find((item) => item.key === MOCK_SELECTED_CATEGORIES_OBJECT[0].key)
+                ).toBeUndefined();
+            });
+
+            it('should remove multiple items by keys from the dialog selected items', () => {
+                store.removeSelected(MOCK_SELECTED_CATEGORIES_OBJECT.map((item) => item.key));
+
+                expect(store.dialog.selected()).toEqual(EMPTY_ARRAY);
+            });
         });
     });
 });

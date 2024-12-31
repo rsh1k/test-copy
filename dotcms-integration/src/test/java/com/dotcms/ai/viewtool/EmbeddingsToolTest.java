@@ -1,13 +1,19 @@
 package com.dotcms.ai.viewtool;
 
-import com.dotcms.ai.app.AIModel;
-import com.dotcms.ai.app.AIModelType;
+import com.dotcms.ai.AiTest;
 import com.dotcms.ai.app.AppConfig;
+import com.dotcms.ai.app.ConfigService;
 import com.dotcms.datagen.EmbeddingsDTODataGen;
 import com.dotcms.datagen.SiteDataGen;
+import com.dotcms.datagen.UserDataGen;
 import com.dotcms.util.IntegrationTestInitService;
+import com.dotcms.util.network.IPUtils;
 import com.dotmarketing.beans.Host;
+import com.dotmarketing.business.APILocator;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.liferay.portal.model.User;
 import org.apache.velocity.tools.view.context.ViewContext;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -33,22 +39,36 @@ import static org.mockito.Mockito.when;
  */
 public class EmbeddingsToolTest {
 
+    private static WireMockServer wireMockServer;
+
     private Host host;
     private AppConfig appConfig;
+    private User user;
     private EmbeddingsTool embeddingsTool;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         IntegrationTestInitService.getInstance().init();
+        IPUtils.disabledIpPrivateSubnet(true);
+        wireMockServer = AiTest.prepareWireMock();
+        AiTest.aiAppSecrets(APILocator.systemHost());
     }
 
     @Before
-    public void before() {
+    public void before() throws Exception {
         final ViewContext viewContext = mock(ViewContext.class);
         when(viewContext.getRequest()).thenReturn(mock(HttpServletRequest.class));
         host = new SiteDataGen().nextPersisted();
-        appConfig = prepareAppConfig();
+        AiTest.aiAppSecrets(host);
+        appConfig = ConfigService.INSTANCE.config(host);
+        user = new UserDataGen().nextPersisted();
         embeddingsTool = prepareEmbeddingsTool(viewContext);
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        wireMockServer.stop();
+        IPUtils.disabledIpPrivateSubnet(false);
     }
 
     /**
@@ -86,6 +106,11 @@ public class EmbeddingsToolTest {
      */
     @Test
     public void test_getIndexCount() {
+        final String prompt = "Explain the meaning of life.";
+        EmbeddingsDTODataGen.persistEmbeddings(prompt, null, "default");
+
+        embeddingsTool.generateEmbeddings(prompt);
+
         final Map<String, Map<String, Object>> embeddings = embeddingsTool.getIndexCount();
         assertNotNull(embeddings);
         assertEmbeddings(embeddings, "default");
@@ -113,14 +138,12 @@ public class EmbeddingsToolTest {
             AppConfig appConfig() {
                 return appConfig;
             }
-        };
-    }
 
-    private AppConfig prepareAppConfig() {
-        final AppConfig config = mock(AppConfig.class);
-        final AIModel aiModel = AIModel.builder().withType(AIModelType.TEXT).withNames("gpt-3.5-turbo-16k").build();
-        when(config.getModel()).thenReturn(aiModel);
-        return config;
+            @Override
+            public User user() {
+                return user;
+            }
+        };
     }
 
 }

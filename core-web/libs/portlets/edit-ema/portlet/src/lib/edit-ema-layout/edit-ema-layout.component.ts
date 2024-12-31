@@ -12,13 +12,15 @@ import {
     finalize,
     switchMap,
     take,
-    takeUntil
+    takeUntil,
+    tap
 } from 'rxjs/operators';
 
 import { DotMessageService, DotPageLayoutService, DotRouterService } from '@dotcms/data-access';
-import { DotPageRender, DotTemplateDesigner } from '@dotcms/dotcms-models';
+import { DotTemplateDesigner } from '@dotcms/dotcms-models';
 import { TemplateBuilderModule } from '@dotcms/template-builder';
 
+import { UVE_STATUS } from '../shared/enums';
 import { UVEStore } from '../store/dot-uve.store';
 
 export const DEBOUNCE_TIME = 5000;
@@ -87,7 +89,7 @@ export class EditEmaLayoutComponent implements OnInit, OnDestroy {
             .save(this.uveStore.$layoutProps().pageId, { ...template, title: null })
             .pipe(take(1))
             .subscribe(
-                (updatedPage: DotPageRender) => this.handleSuccessSaveTemplate(updatedPage),
+                () => this.handleSuccessSaveTemplate(),
                 (err: HttpErrorResponse) => this.handleErrorSaveTemplate(err),
                 () => this.dotRouterService.allowRouteDeactivation()
             );
@@ -110,6 +112,7 @@ export class EditEmaLayoutComponent implements OnInit, OnDestroy {
             .pipe(
                 // debounceTime should be before takeUntil to avoid calling the observable after unsubscribe.
                 // More information: https://stackoverflow.com/questions/58974320/how-is-it-possible-to-stop-a-debounced-rxjs-observable
+                tap(() => this.uveStore.setUveStatus(UVE_STATUS.LOADING)), // Prevent the user to access page properties
                 debounceTime(DEBOUNCE_TIME),
                 takeUntil(this.destroy$),
                 switchMap((layout: DotTemplateDesigner) => {
@@ -129,7 +132,7 @@ export class EditEmaLayoutComponent implements OnInit, OnDestroy {
                 })
             )
             .subscribe(
-                (updatedPage: DotPageRender) => this.handleSuccessSaveTemplate(updatedPage),
+                () => this.handleSuccessSaveTemplate(),
                 (err: HttpErrorResponse) => this.handleErrorSaveTemplate(err)
             );
     }
@@ -138,17 +141,16 @@ export class EditEmaLayoutComponent implements OnInit, OnDestroy {
      * Handle the success save template
      *
      * @private
-     * @param {DotPageRender} _
+     * @template T
      * @memberof EditEmaLayoutComponent
      */
-    private handleSuccessSaveTemplate(page: DotPageRender): void {
+    private handleSuccessSaveTemplate(): void {
         this.messageService.add({
             severity: 'success',
             summary: 'Success',
             detail: this.dotMessageService.get('dot.common.message.saved')
         });
-
-        this.uveStore.updateLayout(page.layout);
+        this.uveStore.reload();
     }
 
     /**
@@ -164,6 +166,8 @@ export class EditEmaLayoutComponent implements OnInit, OnDestroy {
             summary: 'Error',
             detail: this.dotMessageService.get('dot.common.http.error.400.message')
         });
+
+        this.uveStore.setUveStatus(UVE_STATUS.ERROR);
     }
 
     /**

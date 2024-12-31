@@ -131,13 +131,16 @@ const writeModelToDropdown = async () => {
     }
 
     for (i = 0; i < dotAiState.config.availableModels.length; i++) {
+        if (dotAiState.config.availableModels[i].type !== 'TEXT') {
+            continue;
+        }
 
         const newOption = document.createElement("option");
-        newOption.value = dotAiState.config.availableModels[i];
-        newOption.text = `${dotAiState.config.availableModels[i]}`
-        if (dotAiState.config.availableModels[i] === dotAiState.config.model) {
+        newOption.value = dotAiState.config.availableModels[i].name;
+        newOption.text = `${dotAiState.config.availableModels[i].name}`
+        if (dotAiState.config.availableModels[i].current) {
             newOption.selected = true;
-            newOption.text = `${dotAiState.config.availableModels[i]} (default)`
+            newOption.text = `${dotAiState.config.availableModels[i].name} (default)`
         }
         modelName.appendChild(newOption);
     }

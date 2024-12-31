@@ -23,8 +23,6 @@
         <docker.wm.volume>./src/test/resources</docker.wm.volume>
         <docker.wm.volume.internal>/home/wiremock</docker.wm.volume.internal>
         <testdata.dir>${project.build.directory}/testdata</testdata.dir>
-        <it.test.fork-folder.prefix>${project.build.directory}/testdata/fork-</it.test.fork-folder.prefix>
-        <it.test.fork-folder>${it.test.fork-folder.prefix}</it.test.fork-folder>
         <cleanup.before.tests>true</cleanup.before.tests>
         <postman.test.skip>true</postman.test.skip>
         <yarn.install.cmd>install --frozen-lockfile</yarn.install.cmd>
@@ -113,12 +111,9 @@
                                     </bind>
                                 </volumes>
                                 <log>
-                                    <prefix>WireMock:</prefix>
+                                    <prefix>[WireMock]</prefix>
                                     <color>green</color>
                                 </log>
-                                <env>
-                                    <WIREMOCK_OPTIONS>--verbose</WIREMOCK_OPTIONS>
-                                </env>
                             </run>
                         </wiremock>
                         <dotcms>
@@ -134,13 +129,11 @@
                                     <DOT_ENABLE_SCRIPTING>true</DOT_ENABLE_SCRIPTING>
                                     <DOT_ANNOUNCEMENTS_BASE_URL>http://localhost:8080</DOT_ANNOUNCEMENTS_BASE_URL>
                                     <DOT_ALLOW_ACCESS_TO_PRIVATE_SUBNETS>true</DOT_ALLOW_ACCESS_TO_PRIVATE_SUBNETS>
-                                    <DOT_APP_AI_PARAM_API_URL>http://wm:8080/c</DOT_APP_AI_PARAM_API_URL>
-                                    <DOT_APP_AI_PARAM_API_IMAGE_URL>http://wm:8080/i</DOT_APP_AI_PARAM_API_IMAGE_URL>
-                                    <DOT_APP_AI_PARAM_API_KEY>${wiremock.api.key}</DOT_APP_AI_PARAM_API_KEY>
-                                    <DOT_APP_AI_PARAM_API_EMBEDDINGS_URL>http://wm:8080/e</DOT_APP_AI_PARAM_API_EMBEDDINGS_URL>
-                                    <DOT_OPEN_AI_EMBEDDINGS_URL>http://wm:8080/e</DOT_OPEN_AI_EMBEDDINGS_URL>
-                                    <DOT_OPEN_AI_MODELS_URL>http://wm:8080/m</DOT_OPEN_AI_MODELS_URL>
                                     <DOT_DOTCMS_DEV_MODE>true</DOT_DOTCMS_DEV_MODE>
+                                    <DOT_AI_API_URL>http://wm:8080/c</DOT_AI_API_URL>
+                                    <DOT_AI_IMAGE_API_URL>http://wm:8080/i</DOT_AI_IMAGE_API_URL>
+                                    <DOT_AI_EMBEDDINGS_API_URL>http://wm:8080/e</DOT_AI_EMBEDDINGS_API_URL>
+                                    <DOT_AI_MODELS_API_URL>http://wm:8080/m</DOT_AI_MODELS_API_URL>
                                 </env>
                                 <links combine.children="append">
                                     <link>wiremock:wm</link>

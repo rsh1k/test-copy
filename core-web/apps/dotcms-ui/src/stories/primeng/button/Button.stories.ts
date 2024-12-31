@@ -1,8 +1,8 @@
-import { Meta, Story } from '@storybook/angular';
+import { Meta, StoryObj } from '@storybook/angular';
 
 import { Button } from 'primeng/button';
 
-export default {
+const meta: Meta = {
     title: 'PrimeNG/Button',
     component: Button,
     args: {
@@ -37,33 +37,37 @@ export default {
             options: ['left', 'right']
         }
     }
-} as Meta;
+};
+export default meta;
 
-export const Main: Story = (args) => {
-    const argsWithClasses = ['size', 'severity', 'type', 'rounded'];
-    const parts = [];
+type Story = StoryObj;
 
-    for (const key of argsWithClasses) {
-        if (
-            typeof args[key] === 'string' &&
-            args[key].trim() !== '-' &&
-            args[key].trim().length > 0
-        ) {
-            parts.push(args[key].trim());
+export const Default: Story = {
+    render: (args) => {
+        const argsWithClasses = ['size', 'severity', 'type', 'rounded'];
+        const parts = [];
+
+        for (const key of argsWithClasses) {
+            if (
+                typeof args[key] === 'string' &&
+                args[key].trim() !== '-' &&
+                args[key].trim().length > 0
+            ) {
+                parts.push(args[key].trim());
+            }
         }
-    }
 
-    const joined = parts.join(' ');
+        const joined = parts.join(' ');
 
-    return {
-        props: {
-            label: args.label,
-            classes: joined,
-            disabled: args.disabled,
-            icon: args.icon ?? '',
-            iconPos: args.iconPos
-        },
-        template: `
+        return {
+            props: {
+                label: args.label,
+                classes: joined,
+                disabled: args.disabled,
+                icon: args.icon ?? '',
+                iconPos: args.iconPos
+            },
+            template: `
             <p-button
                 [icon]="icon"
                 [iconPos]="iconPos"
@@ -71,5 +75,6 @@ export const Main: Story = (args) => {
                 [label]="label"
                 [styleClass]="classes">
             </p-button>`
-    };
+        };
+    }
 };

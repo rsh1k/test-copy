@@ -1,6 +1,6 @@
 "use client";
 
-import WebPageContent from "./content-types/webPageContent";
+import GqlWebPageContent from "./content-types/gqlWebPageContent";
 import Banner from "./content-types/banner";
 import Activity from "./content-types/activity";
 import CallToAction from "./content-types/callToAction";
@@ -28,7 +28,7 @@ const experimentConfig = {
 
 // Mapping of components to DotCMS content types
 const componentsMap = {
-    webPageContent: WebPageContent,
+    webPageContent: GqlWebPageContent,
     Banner: Banner,
     Activity: Activity,
     Product: Product,
@@ -38,8 +38,8 @@ const componentsMap = {
     CustomNoComponent: CustomNoComponent,
 };
 
-export function MyGraphQLPage({ pageAsset, nav }) {
-    const { replace, refresh } = useRouter();
+export function MyGraphQLPage({ pageAsset, nav, query }) {
+    const { replace } = useRouter();
     const pathname = usePathname();
 
     /**
@@ -56,22 +56,22 @@ export function MyGraphQLPage({ pageAsset, nav }) {
         : DotcmsLayout;
 
     return (
-        <div className="flex flex-col min-h-screen gap-6 bg-lime-50">
+        <div className="flex flex-col gap-6 min-h-screen bg-lime-50">
             {pageAsset.layout.header && (
                 <Header>
                     <Navigation items={nav} />
                 </Header>
             )}
 
-            <main className="container flex flex-col gap-8 m-auto">
+            <main className="flex flex-col gap-8 m-auto">
                 <DotLayoutComponent
                     pageContext={{
                         components: componentsMap,
                         pageAsset: pageAsset,
                     }}
                     config={{
-                        onReload: () => refresh(),
                         pathname,
+                        editor: { query }
                     }}
                 />
             </main>

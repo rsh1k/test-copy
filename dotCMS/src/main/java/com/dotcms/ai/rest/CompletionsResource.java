@@ -1,15 +1,16 @@
 package com.dotcms.ai.rest;
 
 import com.dotcms.ai.AiKeys;
-import com.dotcms.ai.api.CompletionsAPI;
 import com.dotcms.ai.app.AIModels;
 import com.dotcms.ai.app.AppConfig;
 import com.dotcms.ai.app.AppKeys;
 import com.dotcms.ai.app.ConfigService;
+import com.dotcms.ai.model.SimpleModel;
 import com.dotcms.ai.rest.forms.CompletionsForm;
 import com.dotcms.ai.util.LineReadingOutputStream;
 import com.dotcms.rest.WebResource;
 import com.dotmarketing.beans.Host;
+import com.dotmarketing.business.APILocator;
 import com.dotmarketing.business.web.WebAPILocator;
 import com.dotmarketing.util.UtilMethods;
 import com.dotmarketing.util.json.JSONObject;
@@ -59,8 +60,10 @@ public class CompletionsResource {
                 request,
                 response,
                 formIn,
-                () -> CompletionsAPI.impl().summarize(formIn),
-                out -> CompletionsAPI.impl().summarizeStream(formIn, new LineReadingOutputStream(out)));
+                () -> APILocator.getDotAIAPI().getCompletionsAPI().summarize(formIn),
+                output -> APILocator.getDotAIAPI()
+                        .getCompletionsAPI()
+                        .summarizeStream(formIn, new LineReadingOutputStream(output)));
     }
 
     /**
@@ -82,8 +85,10 @@ public class CompletionsResource {
                 request,
                 response,
                 formIn,
-                () -> CompletionsAPI.impl().raw(formIn),
-                out -> CompletionsAPI.impl().rawStream(formIn, new LineReadingOutputStream(out)));
+                () -> APILocator.getDotAIAPI().getCompletionsAPI().raw(formIn),
+                output -> APILocator.getDotAIAPI()
+                        .getCompletionsAPI()
+                        .rawStream(formIn, new LineReadingOutputStream(output)));
     }
 
     /**
@@ -106,19 +111,18 @@ public class CompletionsResource {
                 .init()
                 .getUser();
         final Host host = WebAPILocator.getHostWebAPI().getCurrentHostNoThrow(request);
-        final AppConfig app = ConfigService.INSTANCE.config(host);
-
+        final AppConfig appConfig = ConfigService.INSTANCE.config(host);
 
         final Map<String, Object> map = new HashMap<>();
         map.put(AiKeys.CONFIG_HOST, host.getHostname() + " (falls back to system host)");
         for (final AppKeys config : AppKeys.values()) {
-            map.put(config.key, app.getConfig(config));
+            map.put(config.key, appConfig.getConfig(config));
         }
 
-        final String apiKey = UtilMethods.isSet(app.getApiKey()) ? "*****" : "NOT SET";
+        final String apiKey = UtilMethods.isSet(appConfig.getApiKey()) ? "*****" : "NOT SET";
         map.put(AppKeys.API_KEY.key, apiKey);
 
-        final List<String> models = AIModels.get().getAvailableModels();
+        final List<SimpleModel> models = AIModels.get().getAvailableModels();
         map.put(AiKeys.AVAILABLE_MODELS, models);
 
         return Response.ok(map).build();
@@ -139,19 +143,25 @@ public class CompletionsResource {
                 .init()
                 .getUser();
         final Host host = WebAPILocator.getHostWebAPI().getCurrentHostNoThrow(request);
-        return (!user.isAdmin())
-                ? CompletionsForm
-                    .copy(formIn)
-                    .model(ConfigService.INSTANCE.config(host).getModel().getCurrentModel())
-                    .build()
-                : formIn;
+        return withUserId(
+                !user.isAdmin()
+                    ? CompletionsForm
+                        .copy(formIn)
+                        .model(ConfigService.INSTANCE.config(host).getModel().getCurrentModel())
+                        .build()
+                    : formIn,
+                user);
+    }
+
+    private static CompletionsForm withUserId(final CompletionsForm completionsForm, final User user) {
+        return CompletionsForm.copy(completionsForm).user(user).build();
     }
 
     private static Response getResponse(final HttpServletRequest request,
                                         final HttpServletResponse response,
                                         final CompletionsForm formIn,
                                         final Supplier<JSONObject> noStream,
-                                        final Consumer<OutputStream> stream) {
+                                        final Consumer<OutputStream> outputStream) {
         if (StringUtils.isBlank(formIn.prompt)) {
             return badRequestResponse();
         }
@@ -161,7 +171,7 @@ public class CompletionsResource {
 
         if (resolvedForm.stream) {
             final StreamingOutput streaming = output -> {
-                stream.accept(output);
+                outputStream.accept(output);
                 output.flush();
                 output.close();
             };
@@ -172,6 +182,5 @@ public class CompletionsResource {
         jsonResponse.put(AiKeys.TOTAL_TIME, System.currentTimeMillis() - startTime + "ms");
         return Response.ok(jsonResponse.toString(), MediaType.APPLICATION_JSON).build();
     }
-
 
 }

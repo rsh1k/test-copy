@@ -10,10 +10,11 @@ import { FormsModule } from '@angular/forms';
 
 import { Tree, TreeModule } from 'primeng/tree';
 
-import { files } from '../../utils/tree-node-files';
+import { generateFakeTree } from '../../utils/tree-node-files';
 
 const meta: Meta<Tree> = {
     title: 'PrimeNG/Data/Tree',
+    component: Tree,
     decorators: [
         moduleMetadata({
             imports: [TreeModule, FormsModule]
@@ -23,25 +24,20 @@ const meta: Meta<Tree> = {
                 `<div class="card flex justify-content-center w-25rem h-25rem">${story}</div>`
         )
     ],
-    component: Tree,
     parameters: {
         layout: 'centered',
         docs: {
             description: {
-                component:
-                    'Tree is used to display hierarchical data: https://www.primefaces.org/primeng-v15-lts/tree'
+                component: 'Tree is used to display hierarchical data: https://primeng.org/tree'
             }
         }
     },
     args: {
-        value: [...files]
+        value: [...generateFakeTree()]
     },
-    render: (args: Tree) => ({
-        props: {
-            ...args
-        },
-        template: `
-        <p-tree ${argsToTemplate(args)} />`
+    render: (args) => ({
+        props: args,
+        template: `<p-tree ${argsToTemplate(args)} />`
     })
 };
 export default meta;
@@ -50,15 +46,22 @@ type Story = StoryObj<Tree>;
 
 export const Default: Story = {};
 
+export const Checkbox: Story = {
+    args: {
+        selectionMode: 'checkbox'
+    }
+};
+
 export const VirtualScroll: Story = {
     args: {
+        value: [...generateFakeTree(1000)],
         virtualScroll: true,
         virtualScrollItemSize: 30,
         virtualScrollOptions: {
             autoSize: true,
             style: {
                 width: '200px',
-                height: '200px'
+                height: '300px'
             }
         }
     }

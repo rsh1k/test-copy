@@ -1,13 +1,18 @@
 package com.dotcms.ai.app;
 
+import com.dotcms.ai.domain.Model;
 import com.dotcms.security.apps.Secret;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for the \AIAppUtil\ class. This test class verifies the functionality
@@ -84,20 +89,6 @@ public class AIAppUtilTest {
     }
 
     /**
-     * Given a map of secrets containing a key with an environment secret value
-     * When the discoverEnvSecret method is called with the key
-     * Then the environment secret value should be returned.
-     */
-    @Test
-    public void testDiscoverEnvSecret() {
-        when(secrets.get("apiKey")).thenReturn(secret);
-        when(secret.getString()).thenReturn("envSecretValue");
-
-        String result = aiAppUtil.discoverEnvSecret(secrets, AppKeys.API_KEY);
-        assertEquals("envSecretValue", result);
-    }
-
-    /**
      * Given a map of secrets containing a key with an integer secret value
      * When the discoverIntSecret method is called with the key
      * Then the integer secret value should be returned.
@@ -138,7 +129,7 @@ public class AIAppUtilTest {
         AIModel model = aiAppUtil.createTextModel(secrets);
         assertNotNull(model);
         assertEquals(AIModelType.TEXT, model.getType());
-        assertTrue(model.getNames().contains("textModel"));
+        assertTrue(model.getModels().stream().map(Model::getName).collect(Collectors.toList()).contains("textmodel"));
     }
 
     /**
@@ -154,7 +145,7 @@ public class AIAppUtilTest {
         AIModel model = aiAppUtil.createImageModel(secrets);
         assertNotNull(model);
         assertEquals(AIModelType.IMAGE, model.getType());
-        assertTrue(model.getNames().contains("imageModel"));
+        assertTrue(model.getModels().stream().map(Model::getName).collect(Collectors.toList()).contains("imagemodel"));
     }
 
     /**
@@ -170,7 +161,21 @@ public class AIAppUtilTest {
         AIModel model = aiAppUtil.createEmbeddingsModel(secrets);
         assertNotNull(model);
         assertEquals(AIModelType.EMBEDDINGS, model.getType());
-        assertTrue(model.getNames().contains("embeddingsmodel"));
+        assertTrue(model.getModels().stream().map(Model::getName).collect(Collectors.toList())
+                .contains("embeddingsmodel"));
+    }
+
+    @Test
+    public void testDiscoverEnvSecret() {
+        // Mock the secret value in the secrets map
+        when(secrets.get("apiKey")).thenReturn(secret);
+        when(secret.getString()).thenReturn("secretValue");
+
+        // Call the method with the key and environment variable
+        String result = aiAppUtil.discoverEnvSecret(secrets, AppKeys.API_KEY, "ENV_API_KEY");
+
+        // Assert the expected outcome
+        assertEquals("secretValue", result);
     }
 
 }

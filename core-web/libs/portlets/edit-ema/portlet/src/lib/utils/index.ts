@@ -8,12 +8,29 @@ import {
     VanityUrl
 } from '@dotcms/dotcms-models';
 
+import { EmaDragItem } from '../edit-ema-editor/components/ema-page-dropzone/types';
 import { DotPageApiParams } from '../services/dot-page-api.service';
 import { COMMON_ERRORS, DEFAULT_PERSONA } from '../shared/consts';
 import { EDITOR_STATE } from '../shared/enums';
-import { ActionPayload, ContainerPayload, DotPage, PageContainer } from '../shared/models';
+import {
+    ActionPayload,
+    ContainerPayload,
+    ContentletDragPayload,
+    ContentTypeDragPayload,
+    DotPage,
+    DragDatasetItem,
+    PageContainer
+} from '../shared/models';
 
 export const SDK_EDITOR_SCRIPT_SOURCE = '/html/js/editor-js/sdk-editor.js';
+
+export const TEMPORAL_DRAG_ITEM: EmaDragItem = {
+    baseType: 'dotAsset',
+    contentType: 'dotAsset',
+    draggedPayload: {
+        type: 'temp'
+    }
+};
 
 /**
  * Insert a contentlet in a container
@@ -271,15 +288,26 @@ export function createFavoritePagesURL(params: {
 }
 
 /**
- * Create a pure URL from the params
  *
+ * @description Create a full URL with the clientHost
  * @export
  * @param {DotPageApiParams} params
  * @return {*}  {string}
  */
-export function createPureURL(params: DotPageApiParams): string {
+/**
+ * @description Create a full URL with the clientHost
+ * @export
+ * @param {DotPageApiParams} params
+ * @param {string} [siteId]
+ * @return {*}  {string}
+ */
+export function createFullURL(params: DotPageApiParams, siteId?: string): string {
     // If we are going to delete properties from the params, we need to make a copy of it
     const paramsCopy = { ...params };
+
+    if (siteId) {
+        paramsCopy['host_id'] = siteId;
+    }
 
     const clientHost = paramsCopy?.clientHost ?? window.location.origin;
     const url = paramsCopy?.url;
@@ -289,9 +317,11 @@ export function createPureURL(params: DotPageApiParams): string {
     delete paramsCopy?.url;
     delete paramsCopy?.mode;
 
-    const searchParams = new URLSearchParams(paramsCopy as unknown as Record<string, string>);
+    const searchParams = new URLSearchParams(paramsCopy);
 
-    return `${clientHost}/${url}?${searchParams.toString()}`;
+    const pureURL = new URL(`${url}?${searchParams.toString()}`, clientHost);
+
+    return pureURL.toString();
 }
 
 /**
@@ -420,3 +450,63 @@ export const getEditorStates = (state: EDITOR_STATE) => ({
     dragIsActive: state === EDITOR_STATE.DRAGGING || state === EDITOR_STATE.SCROLL_DRAG,
     isScrolling: state === EDITOR_STATE.SCROLL_DRAG || state === EDITOR_STATE.SCROLLING
 });
+
+/**
+ * Compare two URL paths
+ *
+ * @param {string} urlPath
+ * @param {string} urlPath2
+ * @return {*}  {boolean}
+ */
+export const compareUrlPaths = (urlPath: string, urlPath2: string): boolean => {
+    // Host doesn't matter here, we just need the pathname
+    const { pathname: pathname1 } = new URL(urlPath, window.origin);
+    const { pathname: pathname2 } = new URL(urlPath2, window.origin);
+
+    return pathname1 === pathname2;
+};
+
+/**
+ * Get the data from the drag dataset
+ *
+ * @param {DragDataset} dataset
+ * @return {*}
+ */
+export const getDragItemData = ({ type, item }: DOMStringMap) => {
+    try {
+        const data = JSON.parse(item) as DragDatasetItem;
+        const { contentType, contentlet, container, move } = data;
+
+        if (type === 'content-type') {
+            return {
+                baseType: contentType.baseType,
+                contentType: contentType.variable,
+                draggedPayload: {
+                    item: {
+                        variable: contentType.variable,
+                        name: contentType.name
+                    },
+                    type,
+                    move
+                } as ContentTypeDragPayload
+            };
+        }
+
+        return {
+            baseType: contentlet.baseType,
+            contentType: contentlet.contentType,
+            draggedPayload: {
+                item: {
+                    contentlet,
+                    container
+                },
+                type,
+                move
+            } as ContentletDragPayload
+        };
+    } catch (error) {
+        // It can fail if the data.item is not a valid JSON
+        // In that case, we are draging an invalid element from the window
+        return null;
+    }
+};

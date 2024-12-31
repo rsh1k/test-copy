@@ -43,6 +43,11 @@ export type CategoryFieldState = {
     // search
     filter: string;
     searchCategories: DotCategory[];
+    //dialog
+    dialog: {
+        selected: DotCategoryFieldKeyValueObj[];
+        state: 'open' | 'closed';
+    };
 };
 
 export const initialState: CategoryFieldState = {
@@ -50,10 +55,14 @@ export const initialState: CategoryFieldState = {
     selected: [],
     categories: [],
     keyParentPath: [],
-    state: ComponentStatus.IDLE,
+    state: ComponentStatus.INIT,
     mode: 'list',
     filter: '',
-    searchCategories: []
+    searchCategories: [],
+    dialog: {
+        selected: [],
+        state: 'closed'
+    }
 };
 
 /**
@@ -65,21 +74,11 @@ export const CategoryFieldStore = signalStore(
     withState(initialState),
     withComputed((store) => ({
         /**
-         * Current selected items (key) from the contentlet
-         */
-        selectedCategoriesValues: computed(() => store.selected().map((item) => item.key)),
-
-        /**
          * Categories for render with added properties
          */
         categoryList: computed(() =>
             store.categories().map((column) => transformCategories(column, store.keyParentPath()))
         ),
-
-        /**
-         * Indicates whether any categories are selected.
-         */
-        hasSelectedCategories: computed(() => !!store.selected().length),
 
         /**
          * Get the root category inode.
@@ -92,11 +91,21 @@ export const CategoryFieldStore = signalStore(
         fieldVariableName: computed(() => store.field().variable),
 
         /**
+         * Status of the List Component
+         */
+        listState: computed(() => (store.mode() === 'list' ? store.state() : ComponentStatus.INIT)),
+
+        /**
          * Determines if the list mode is currently loading.
          */
         isListLoading: computed(
             () => store.mode() === 'list' && store.state() === ComponentStatus.LOADING
         ),
+
+        /**
+         * Determines if the store state is currently loaded.
+         */
+        isInitSate: computed(() => store.state() === ComponentStatus.INIT),
 
         /**
          * Determines if the search mode is currently loading.
@@ -108,7 +117,7 @@ export const CategoryFieldStore = signalStore(
         /**
          * Status of the Search Component
          */
-        searchStatus: computed(() =>
+        searchState: computed(() =>
             store.mode() === 'search' ? store.state() : ComponentStatus.INIT
         ),
 
@@ -129,7 +138,21 @@ export const CategoryFieldStore = signalStore(
             const keyParentPath = store.keyParentPath();
 
             return getMenuItemsFromKeyParentPath(categories, keyParentPath);
-        })
+        }),
+
+        // Dialog
+        /**
+         * Computed property that checks if a dialog is open.
+         */
+        isDialogOpen: computed(() => store.dialog.state() === 'open'),
+
+        /**
+         * A computed property that retrieves the keys of selected dialog items.
+         * This function accesses the store's dialog and maps each selected item's key.
+         *
+         * @returns {Array} An array of keys of selected dialog items.
+         */
+        dialogSelectedKeys: computed(() => store.dialog.selected().map((item) => item.key))
     })),
     withMethods(
         (
@@ -178,11 +201,38 @@ export const CategoryFieldStore = signalStore(
                 )
             ),
 
+            /**
+             * Sets the mode for the CategoryFieldView and resets search categories and filter.
+             */
             setMode(mode: CategoryFieldViewMode): void {
                 patchState(store, {
                     mode,
                     searchCategories: [],
                     filter: ''
+                });
+            },
+
+            /**
+             * Opens the dialog with the current selected items and sets the state to 'open'.
+             */
+            openDialog(): void {
+                patchState(store, {
+                    dialog: {
+                        selected: [...store.selected()],
+                        state: 'open'
+                    }
+                });
+            },
+
+            /**
+             * Closes the dialog and resets the selected items.
+             */
+            closeDialog(): void {
+                patchState(store, {
+                    dialog: {
+                        selected: [],
+                        state: 'closed'
+                    }
                 });
             },
 
@@ -196,13 +246,13 @@ export const CategoryFieldStore = signalStore(
              */
             updateSelected(categoryListChecked: string[], item: DotCategoryFieldKeyValueObj): void {
                 const currentChecked: DotCategoryFieldKeyValueObj[] = updateChecked(
-                    store.selected(),
+                    store.dialog.selected(),
                     categoryListChecked,
                     item
                 );
 
                 patchState(store, {
-                    selected: currentChecked
+                    dialog: { ...store.dialog(), selected: [...currentChecked] }
                 });
             },
 
@@ -215,9 +265,33 @@ export const CategoryFieldStore = signalStore(
             addSelected(
                 selectedItem: DotCategoryFieldKeyValueObj | DotCategoryFieldKeyValueObj[]
             ): void {
-                const updatedSelected = addSelected(store.selected(), selectedItem);
+                const updatedSelected = addSelected(store.dialog.selected(), selectedItem);
                 patchState(store, {
-                    selected: updatedSelected
+                    dialog: { state: 'open', selected: updatedSelected }
+                });
+            },
+
+            /**
+             * Applies the selected items from the dialog to the store.
+             */
+            applyDialogSelection(): void {
+                const { selected } = store.dialog();
+                patchState(store, {
+                    selected
+                });
+            },
+
+            /**
+             * Removes the selected at the dialog items with the given key(s).
+             *
+             * @param {string | string[]} key - The key(s) of the item(s) to be removed.
+             * @return {void}
+             */
+            removeSelected(key: string | string[]): void {
+                const selected = removeItemByKey(store.dialog.selected(), key);
+
+                patchState(store, {
+                    dialog: { ...store.dialog(), selected }
                 });
             },
 
@@ -227,16 +301,14 @@ export const CategoryFieldStore = signalStore(
              * @param {string | string[]} key - The key(s) of the item(s) to be removed.
              * @return {void}
              */
-            removeSelected(key: string | string[]): void {
-                const newSelected = removeItemByKey(store.selected(), key);
+            removeRootSelected(key: string | string[]): void {
+                const selected = removeItemByKey(store.selected(), key);
 
-                patchState(store, {
-                    selected: newSelected
-                });
+                patchState(store, { selected });
             },
 
             /**
-             * Clears all categories from the store, effectively resetting state related to categories and their parent paths.
+             * Resets the store to its initial state.
              */
             clean() {
                 patchState(store, {
@@ -244,7 +316,8 @@ export const CategoryFieldStore = signalStore(
                     keyParentPath: [],
                     mode: 'list',
                     filter: '',
-                    searchCategories: []
+                    searchCategories: [],
+                    state: ComponentStatus.INIT
                 });
             },
 
@@ -275,6 +348,7 @@ export const CategoryFieldStore = signalStore(
                             }
                         }
                     }),
+
                     // Only pass if you click a item with children
                     filter(
                         (event) =>
@@ -291,27 +365,21 @@ export const CategoryFieldStore = signalStore(
                         return categoryService.getChildren(categoryInode).pipe(
                             tapResponse({
                                 next: (newCategories) => {
+                                    const changes: Partial<CategoryFieldState> = {
+                                        categories: removeEmptyArrays([
+                                            ...store.categories(),
+                                            newCategories
+                                        ]),
+                                        state: ComponentStatus.LOADED
+                                    };
                                     if (event) {
-                                        patchState(store, {
-                                            categories: removeEmptyArrays([
-                                                ...store.categories(),
-                                                newCategories
-                                            ]),
-                                            state: ComponentStatus.LOADED,
-                                            keyParentPath: [
-                                                ...store.keyParentPath(),
-                                                event.item.key
-                                            ]
-                                        });
-                                    } else {
-                                        patchState(store, {
-                                            categories: removeEmptyArrays([
-                                                ...store.categories(),
-                                                newCategories
-                                            ]),
-                                            state: ComponentStatus.LOADED
-                                        });
+                                        changes.keyParentPath = [
+                                            ...store.keyParentPath(),
+                                            event.item.key
+                                        ];
                                     }
+
+                                    patchState(store, changes);
                                 },
                                 error: () => {
                                     // TODO: Add Error Handler

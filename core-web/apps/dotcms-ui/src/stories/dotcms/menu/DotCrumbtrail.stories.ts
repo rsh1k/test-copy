@@ -5,9 +5,7 @@ import { DotCrumbtrailComponent } from '@components/dot-crumbtrail/dot-crumbtrai
 import { DotCrumbtrailModule } from '@components/dot-crumbtrail/dot-crumbtrail.module';
 import { DotCrumbtrailService } from '@components/dot-crumbtrail/service/dot-crumbtrail.service';
 
-type Args = DotCrumbtrailComponent;
-
-const meta: Meta<Args> = {
+const meta: Meta<DotCrumbtrailComponent> = {
     title: 'DotCMS/Menu/DotCrumbtrail',
     component: DotCrumbtrailComponent,
     decorators: [
@@ -43,7 +41,6 @@ const meta: Meta<Args> = {
         )
     ],
     parameters: {
-        layout: 'centered',
         docs: {
             description: {
                 component:
@@ -51,15 +48,14 @@ const meta: Meta<Args> = {
             }
         }
     },
-    render: () => {
-        return {
-            template: `<dot-crumbtrail class="max-w-full" />`
-        };
-    }
+    render: (args) => ({
+        props: args,
+        template: `<dot-crumbtrail class="max-w-full" />`
+    })
 };
 
 export default meta;
 
-type Story = StoryObj<Args>;
+type Story = StoryObj<DotCrumbtrailComponent>;
 
 export const Default: Story = {};

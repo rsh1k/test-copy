@@ -9,15 +9,17 @@ import { ControlContainer, FormControl, FormGroup } from '@angular/forms';
 import { DotHttpErrorManagerService, DotMessageService } from '@dotcms/data-access';
 import { DotCMSContentlet } from '@dotcms/dotcms-models';
 
-import { DotCategoryFieldSidebarComponent } from './components/dot-category-field-sidebar/dot-category-field-sidebar.component';
+import { DotCategoryFieldDialogComponent } from './components/dot-category-field-dialog/dot-category-field-dialog.component';
 import { DotEditContentCategoryFieldComponent } from './dot-edit-content-category-field.component';
 import {
     CATEGORY_FIELD_CONTENTLET_MOCK,
     CATEGORY_FIELD_MOCK,
     CATEGORY_FIELD_VARIABLE_NAME,
     CATEGORY_HIERARCHY_MOCK,
-    SELECTED_LIST_MOCK
+    CATEGORY_LEVEL_2,
+    MOCK_SELECTED_CATEGORIES_OBJECT
 } from './mocks/category-field.mocks';
+import { DotCategoryFieldKeyValueObj } from './models/dot-category-field.models';
 import { CategoriesService } from './services/categories.service';
 import { CategoryFieldStore } from './store/content-category-field.store';
 
@@ -33,7 +35,7 @@ describe('DotEditContentCategoryFieldComponent', () => {
 
     const createComponent = createComponentFactory({
         component: DotEditContentCategoryFieldComponent,
-        imports: [MockComponent(DotCategoryFieldSidebarComponent)],
+        imports: [MockComponent(DotCategoryFieldDialogComponent)],
         componentViewProviders: [
             {
                 provide: ControlContainer,
@@ -71,11 +73,11 @@ describe('DotEditContentCategoryFieldComponent', () => {
             });
 
             it('should render a button for selecting categories', () => {
-                expect(spectator.query(byTestId('show-sidebar-btn'))).not.toBeNull();
+                expect(spectator.query(byTestId('show-dialog-btn'))).not.toBeNull();
             });
 
             it('should the button be type=button', () => {
-                const selectBtn = spectator.query<HTMLButtonElement>(byTestId('show-sidebar-btn'));
+                const selectBtn = spectator.query<HTMLButtonElement>(byTestId('show-dialog-btn'));
                 expect(selectBtn.type).toBe('button');
             });
 
@@ -86,7 +88,7 @@ describe('DotEditContentCategoryFieldComponent', () => {
             it('should categoryFieldControl has the values loaded on the store', () => {
                 const categoryValue = spectator.component.categoryFieldControl.value;
 
-                expect(categoryValue).toEqual(SELECTED_LIST_MOCK);
+                expect(categoryValue).toEqual(MOCK_SELECTED_CATEGORIES_OBJECT);
             });
         });
 
@@ -130,21 +132,18 @@ describe('DotEditContentCategoryFieldComponent', () => {
             spectator.detectChanges();
         });
 
-        it('should invoke `showCategoriesSidebar` method when the select button is clicked', () => {
-            const selectBtn = spectator.query(byTestId('show-sidebar-btn'));
-            const showCategoriesSidebarSpy = jest.spyOn(
-                spectator.component,
-                'openCategoriesSidebar'
-            );
+        it('should invoke `showCategoriesDialog` method when the select button is clicked', () => {
+            const selectBtn = spectator.query(byTestId('show-dialog-btn'));
+            const showCategoriesDialogSpy = jest.spyOn(spectator.component, 'openCategoriesDialog');
             expect(selectBtn).not.toBeNull();
 
             spectator.click(selectBtn);
 
-            expect(showCategoriesSidebarSpy).toHaveBeenCalled();
+            expect(showCategoriesDialogSpy).toHaveBeenCalled();
         });
 
-        it('should disable the `Select` button after `openCategoriesSidebar` method is invoked', () => {
-            const selectBtn = spectator.query(byTestId('show-sidebar-btn')) as HTMLButtonElement;
+        it('should disable the `Select` button after `openCategoriesDialog` method is invoked', () => {
+            const selectBtn = spectator.query(byTestId('show-dialog-btn')) as HTMLButtonElement;
             expect(selectBtn).not.toBeNull();
 
             spectator.click(selectBtn);
@@ -154,34 +153,34 @@ describe('DotEditContentCategoryFieldComponent', () => {
             expect(selectBtn.disabled).toBe(true);
         });
 
-        it('should create a DotEditContentCategoryFieldSidebarComponent instance when the `Select` button is clicked', async () => {
-            const selectBtn = spectator.query<HTMLButtonElement>(byTestId('show-sidebar-btn'));
+        it('should create a DotCategoryFieldDialogComponent instance when the `Select` button is clicked', async () => {
+            const selectBtn = spectator.query<HTMLButtonElement>(byTestId('show-dialog-btn'));
             expect(selectBtn).not.toBeNull();
 
-            expect(spectator.query(DotCategoryFieldSidebarComponent)).toBeNull();
+            expect(spectator.query(DotCategoryFieldDialogComponent)).toBeNull();
 
             spectator.click(selectBtn);
             await spectator.fixture.whenStable();
 
-            expect(spectator.query(DotCategoryFieldSidebarComponent)).not.toBeNull();
+            expect(spectator.query(DotCategoryFieldDialogComponent)).not.toBeNull();
         });
 
-        it('should remove DotEditContentCategoryFieldSidebarComponent when `closedSidebar` emit', fakeAsync(async () => {
-            const selectBtn = spectator.query(byTestId('show-sidebar-btn')) as HTMLButtonElement;
+        it('should remove DotCategoryFieldDialogComponent when `closedDialog` emit', fakeAsync(async () => {
+            const selectBtn = spectator.query(byTestId('show-dialog-btn')) as HTMLButtonElement;
 
             expect(selectBtn).not.toBeNull();
             spectator.click(selectBtn);
             await spectator.fixture.whenStable();
 
-            const sidebarComponentRef = spectator.query(DotCategoryFieldSidebarComponent);
-            expect(sidebarComponentRef).not.toBeNull();
+            const dialogComponentRef = spectator.query(DotCategoryFieldDialogComponent);
+            expect(dialogComponentRef).not.toBeNull();
 
-            sidebarComponentRef.closedSidebar.emit();
+            dialogComponentRef.closedDialog.emit();
 
             spectator.detectComponentChanges();
 
-            // Check if the sidebar component is removed
-            expect(spectator.query(DotCategoryFieldSidebarComponent)).toBeNull();
+            // Check if the dialog component is removed
+            expect(spectator.query(DotCategoryFieldDialogComponent)).toBeNull();
 
             // Check if the button is enabled again
             expect(selectBtn.disabled).toBe(false);
@@ -189,29 +188,50 @@ describe('DotEditContentCategoryFieldComponent', () => {
             // Check if the form has the correct value
             const categoryValue = spectator.component.categoryFieldControl.value;
 
-            expect(categoryValue).toEqual(SELECTED_LIST_MOCK);
+            expect(categoryValue).toEqual(MOCK_SELECTED_CATEGORIES_OBJECT);
         }));
 
         it('should set categoryFieldControl value when adding a new category', () => {
-            store.addSelected({
-                key: '1234',
-                value: 'test'
-            });
-            spectator.flushEffects();
+            const newItem: DotCategoryFieldKeyValueObj = {
+                key: CATEGORY_LEVEL_2[0].key,
+                value: CATEGORY_LEVEL_2[0].categoryName,
+                inode: CATEGORY_LEVEL_2[0].inode,
+                path: CATEGORY_LEVEL_2[0].categoryName
+            };
 
-            const categoryValue = spectator.component.categoryFieldControl.value;
+            // this apply selected to the dialog
+            store.openDialog();
 
-            expect(categoryValue).toEqual([...SELECTED_LIST_MOCK, '1234']);
+            // Add the new category
+            store.addSelected(newItem);
+            // Apply the selected to the field
+            store.applyDialogSelection();
+
+            spectator.detectChanges();
+
+            const categoryValues = spectator.component.categoryFieldControl.value;
+
+            expect(categoryValues).toEqual([...MOCK_SELECTED_CATEGORIES_OBJECT, newItem]);
         });
 
         it('should set categoryFieldControl value when removing a category', () => {
-            store.removeSelected(SELECTED_LIST_MOCK[0]);
+            const categoryValue: DotCategoryFieldKeyValueObj[] =
+                spectator.component.categoryFieldControl.value;
 
-            spectator.flushEffects();
+            const expectedSelected = [categoryValue[0]];
 
-            const categoryValue = spectator.component.categoryFieldControl.value;
+            expect(categoryValue.length).toBe(2);
+            store.openDialog(); // this apply selected to the dialog
 
-            expect(categoryValue).toEqual([SELECTED_LIST_MOCK[1]]);
+            store.removeSelected(categoryValue[1].key);
+            store.applyDialogSelection(); // this apply the selected in the dialog to the final selected
+
+            spectator.detectChanges();
+
+            const newCategoryValue = spectator.component.categoryFieldControl.value;
+
+            expect(newCategoryValue).toEqual(expectedSelected);
+            expect(newCategoryValue.length).toBe(1);
         });
     });
 });

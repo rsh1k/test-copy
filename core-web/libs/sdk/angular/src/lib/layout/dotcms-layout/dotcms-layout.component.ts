@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import { AsyncPipe } from '@angular/common';
 import {
     ChangeDetectionStrategy,
     Component,
@@ -10,11 +10,17 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 
-import { filter } from 'rxjs/operators';
+import {
+    CUSTOMER_ACTIONS,
+    DotCmsClient,
+    EditorConfig,
+    initEditor,
+    isInsideEditor,
+    postMessageToEditor,
+    updateNavigation
+} from '@dotcms/client';
 
-import { DotCmsClient, initEditor, isInsideEditor, updateNavigation } from '@dotcms/client';
-
-import { DynamicComponentEntity } from '../../models';
+import { DotCMSPageComponent } from '../../models';
 import { DotCMSPageAsset } from '../../models/dotcms.model';
 import { PageContextService } from '../../services/dotcms-context/page-context.service';
 import { RowComponent } from '../row/row.component';
@@ -29,33 +35,55 @@ import { RowComponent } from '../row/row.component';
 @Component({
     selector: 'dotcms-layout',
     standalone: true,
-    imports: [RowComponent],
+    imports: [RowComponent, AsyncPipe],
     template: `
-        @for (row of this.pageAsset?.layout?.body?.rows; track $index) {
-            <dotcms-row [row]="row" />
+        @if (pageAsset$ | async; as page) {
+            @for (row of this.page?.layout?.body?.rows; track $index) {
+                <dotcms-row [row]="row" />
+            }
         }
     `,
     styleUrl: './dotcms-layout.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DotcmsLayoutComponent implements OnInit {
+    private _pageAsset!: DotCMSPageAsset;
+
     /**
-     * The `pageAsset` property represents the DotCMS page asset.
+     * Represents the DotCMS page asset.
      *
-     * @type {(DotCMSPageAsset | null)}
+     * @type {DotCMSPageAsset}
      * @memberof DotcmsLayoutComponent
-     * @required
      */
-    @Input({ required: true }) pageAsset: DotCMSPageAsset | null = null;
+    @Input({ required: true })
+    set pageAsset(value: DotCMSPageAsset) {
+        this._pageAsset = value;
+        if (!value.layout) {
+            console.warn(
+                'Warning: pageAsset does not have a `layout` property. Might be using an advaced template or your dotCMS instance not have a enterprise license.'
+            );
+        }
+    }
+
+    /**
+     * Returns the DotCMS page asset.
+     *
+     * @readonly
+     * @type {DotCMSPageAsset}
+     * @memberof DotcmsLayoutComponent
+     */
+    get pageAsset(): DotCMSPageAsset {
+        return this._pageAsset;
+    }
 
     /**
      * The `components` property is a record of dynamic components for each Contentlet on the page.
      *
-     * @type {Record<string, DynamicComponentEntity>}
+     * @type {DotCMSPageComponent}
      * @memberof DotcmsLayoutComponent
      * @required
      */
-    @Input({ required: true }) components!: Record<string, DynamicComponentEntity>;
+    @Input({ required: true }) components!: DotCMSPageComponent;
 
     /**
      * The `onReload` property is a function that reloads the page after changes are made.
@@ -65,41 +93,58 @@ export class DotcmsLayoutComponent implements OnInit {
      */
     @Input() onReload!: () => void;
 
+    /**
+     *
+     * @type {DotCMSFetchConfig}
+     * @memberof DotCMSPageEditorConfig
+     * @description The configuration custom params for data fetching on Edit Mode.
+     * @example <caption>Example with Custom GraphQL query</caption>
+     * <dotcms-layout [editor]="{ query: 'query { ... }' }"/>
+     *
+     * @example <caption>Example usage with Custom Page API parameters</caption>
+     * <dotcms-layout [editor]="{ params: { depth: '2' } }"/>;
+     */
+    @Input() editor!: EditorConfig;
+
     private readonly route = inject(ActivatedRoute);
     private readonly pageContextService = inject(PageContextService);
     private readonly destroyRef$ = inject(DestroyRef);
     private client!: DotCmsClient;
+    protected readonly pageAsset$ = this.pageContextService.currentPage$;
 
     ngOnInit() {
-        this.client = DotCmsClient.instance;
+        this.pageContextService.setContext(this.pageAsset, this.components);
 
-        this.route.url
-            .pipe(
-                takeUntilDestroyed(this.destroyRef$),
-                filter(() => isInsideEditor())
-            )
-            .subscribe((urlSegments) => {
-                const pathname = '/' + urlSegments.join('/');
-
-                initEditor({ pathname });
-                updateNavigation(pathname || '/');
-            });
-
-        if (!isInsideEditor() || !this.onReload) {
+        if (!isInsideEditor()) {
             return;
         }
 
-        this.client.editor.on('changes', () => this.onReload());
-    }
+        this.client = DotCmsClient.instance;
+        this.route.url.pipe(takeUntilDestroyed(this.destroyRef$)).subscribe((urlSegments) => {
+            const pathname = '/' + urlSegments.join('/');
 
-    ngOnChanges() {
-        //Each time the layout changes, we need to update the context
-        if (this.pageAsset !== null) {
-            this.pageContextService.setContext(this.pageAsset, this.components);
-        }
+            initEditor({ pathname });
+            updateNavigation(pathname || '/');
+        });
+
+        this.client.editor.on('changes', (data) => {
+            if (this.onReload) {
+                this.onReload();
+
+                return;
+            }
+
+            this.pageContextService.setPageAsset(data as DotCMSPageAsset);
+        });
+
+        postMessageToEditor({ action: CUSTOMER_ACTIONS.CLIENT_READY, payload: this.editor });
     }
 
     ngOnDestroy() {
+        if (!isInsideEditor()) {
+            return;
+        }
+
         this.client.editor.off('changes');
     }
 }

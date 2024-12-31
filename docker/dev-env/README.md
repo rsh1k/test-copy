@@ -36,7 +36,7 @@ docker run --rm \
 -v $PWD/data:/data \
 -e DOTCMS_SOURCE_ENVIRONMENT=https://demo.dotcms.com \
 -e DOTCMS_API_TOKEN=$TOK \
- dotcms/dotcms-dev:latest
+ dotcms/dotcms-dev:nightly
 ```
 
 #### Clone demo with UserID/Password
@@ -48,7 +48,7 @@ docker run --rm \
 -v $PWD/data:/data \
 -e DOTCMS_SOURCE_ENVIRONMENT=https://demo.dotcms.com \
 -e DOTCMS_USERNAME_PASSWORD="admin@dotcms.com:admin" \
- dotcms/dotcms-dev:latest
+ dotcms/dotcms-dev:nightly
 ```
 
 
@@ -62,7 +62,7 @@ docker run --rm \
 -e DOTCMS_SOURCE_ENVIRONMENT=https://demo.dotcms.com \
 -e DOTCMS_USERNAME_PASSWORD="admin@dotcms.com:admin" \
 -e DOTCMS_CLONE_TYPE=starter \
-dotcms/dotcms-dev:latest
+dotcms/dotcms-dev:nightly
 ```
 
 
@@ -76,7 +76,7 @@ docker run --rm  \
 -p 8000:8000 \
 -v $PWD/data:/data \
 -e DOTCMS_DEBUG=true \
- dotcms/dotcms-dev:latest
+ dotcms/dotcms-dev:nightly
 ```
 
 
@@ -120,12 +120,23 @@ By default, this image is built from the `dotcms/dotcms:latest` tagged version o
 `--build-arg DOTCMS_DOCKER_TAG=latest` or `--build-arg DOTCMS_DOCKER_TAG=23.07`
 
 ```
-docker build --pull --build-arg DOTCMS_DOCKER_TAG=latest  . -t dotcms/dotcms-dev
+docker build --pull --build-arg DOTCMS_DOCKER_TAG=latest --progress=plain --load . -t dotcms/dotcms-dev:testing
 ```
 or
 ```
-docker buildx build --build-arg DOTCMS_DOCKER_TAG=master_latest_SNAPSHOT --platform linux/amd64,linux/arm64 --pull --push -t dotcms/dotcms-dev:master_latest_SNAPSHOT .
+docker buildx build --build-arg DOTCMS_DOCKER_TAG=trunk --platform linux/amd64,linux/arm64 --pull --push -t dotcms/dotcms-dev:testing .
 ```
+
+then
+```
+
+docker run --rm \
+-p 8000:8000 \
+-p 8443:8443 \
+-v $PWD/data:/data 
+dotcms/dotcms-dev:testing
+```
+
 
 ### Included Database and Elasticsearch
 

@@ -1,13 +1,8 @@
 import { DotDevice } from '@dotcms/dotcms-models';
 import { InfoPage } from '@dotcms/ui';
 
-import { CommonErrors } from './enums';
+import { CommonErrors, DialogStatus, FormStatus } from './enums';
 
-import {
-    ClientContentletArea,
-    Container,
-    UpdatedContentlet
-} from '../edit-ema-editor/components/ema-page-dropzone/types';
 import { DotPageApiParams } from '../services/dot-page-api.service';
 
 export interface InfoOptions {
@@ -105,14 +100,6 @@ export interface WorkflowActionResult extends MessageInfo {
     args: unknown[];
 }
 
-export type PostMessagePayload =
-    | ActionPayload
-    | SetUrlPayload
-    | Container[]
-    | ClientContentletArea
-    | ReorderPayload
-    | UpdatedContentlet;
-
 export interface DeletePayload {
     payload: ActionPayload;
     originContainer: ContainerPayload;
@@ -192,6 +179,8 @@ export interface DotPage {
     live: boolean;
     liveInode?: string;
     stInode?: string;
+    working?: boolean;
+    workingInode?: string;
 }
 
 export interface DotDeviceWithIcon extends DotDevice {
@@ -199,3 +188,43 @@ export interface DotDeviceWithIcon extends DotDevice {
 }
 
 export type CommonErrorsInfo = Record<CommonErrors, InfoPage>;
+
+export interface DialogForm {
+    status: FormStatus;
+    isTranslation: boolean;
+}
+
+export interface DialogAction {
+    event: CustomEvent;
+    payload: ActionPayload;
+    form: DialogForm;
+}
+
+export type DialogType = 'content' | 'form' | 'widget' | null;
+
+export interface EditEmaDialogState {
+    header: string;
+    status: DialogStatus;
+    url: string;
+    type: DialogType;
+    payload?: ActionPayload;
+    editContentForm: DialogForm;
+}
+
+// We can modify this if we add more events, for now I think is enough
+export interface CreateFromPaletteAction {
+    variable: string;
+    name: string;
+    payload: ActionPayload;
+}
+
+export interface EditContentletPayload {
+    inode: string;
+    title: string;
+}
+
+export interface CreateContentletAction {
+    url: string;
+    contentType: string;
+    payload: ActionPayload;
+}

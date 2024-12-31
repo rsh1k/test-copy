@@ -1,11 +1,13 @@
 <img src="https://www.dotcms.com/dA/99fe3769-d649/256w/dotcms.png" title="dotcms open source hybrid content management system">
 
 
-[![Merge Queue](https://github.com/dotCMS/core/actions/workflows/build-test-merge_group.yml/badge.svg)](https://github.com/dotCMS/core/actions/workflows/build-test-merge_group.yml)
+[![Merge Queue](https://github.com/dotCMS/core/actions/workflows/cicd_2-merge-queue.yml/badge.svg)](https://github.com/dotCMS/core/actions/workflows/cicd_2-merge-queue.yml)
 
-[![Trunk](https://github.com/dotCMS/core/actions/workflows/build-test-master.yml/badge.svg)](https://github.com/dotCMS/core/actions/workflows/build-test-master.yml)
+[![Trunk](https://github.com/dotCMS/core/actions/workflows/cicd_3-trunk.yml/badge.svg)](https://github.com/dotCMS/core/actions/workflows/cicd_3-trunk.yml)
 
-[![Nightly](https://github.com/dotCMS/core/actions/workflows/build-test-nightly.yml/badge.svg)](https://github.com/dotCMS/core/actions/workflows/build-test-nightly.yml)
+[![Nightly](https://github.com/dotCMS/core/actions/workflows/cicd_4-nightly.yml/badge.svg)](https://github.com/dotCMS/core/actions/workflows/cicd_4-nightly.yml)
+
+
 
 dotCMS is an open source headless/hybrid content management system (CMS) that has been designed to manage and deliver personalized, permission-based content experiences across multiple channels. 
 - **Open Source** - available in both Community (GPL3) and Enterprise Editions
@@ -49,7 +51,7 @@ For a complete list of requirements, see [this page](http://www.dotcms.com/docs/
 | Installation    | [Installation](https://www.dotcms.com/docs/latest/installation)         |
 | Documentation   | [Documentation](https://www.dotcms.com/docs/latest/table-of-contents)   |
 | Videos          | [Helpful Videos](http://www.dotcms.com/videos/)                         |
-| Merge Queue   | [Merge Queue](https://github.com/dotCMS/core/queue/master)                          |
+| Merge Queue   | [Merge Queue](https://github.com/dotCMS/core/queue/main)                          |
 | Forums/Listserv | [via Google Groups](https://groups.google.com/forum/#!forum/dotCMS) |
 | Twitter         | @dotCMS                                                             |
 | Main Site       | [dotCMS.com](https://www.dotcms.com/)                                   |

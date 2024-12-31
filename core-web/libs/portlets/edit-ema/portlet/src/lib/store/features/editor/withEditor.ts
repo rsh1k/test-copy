@@ -7,7 +7,7 @@ import {
     withState
 } from '@ngrx/signals';
 
-import { computed } from '@angular/core';
+import { computed, untracked } from '@angular/core';
 
 import { DotTreeNode, SeoMetaTags } from '@dotcms/dotcms-models';
 
@@ -43,6 +43,8 @@ import {
     getEditorStates
 } from '../../../utils';
 import { UVEState } from '../../models';
+import { withClient } from '../client/withClient';
+
 const initialState: EditorState = {
     bounds: [],
     state: EDITOR_STATE.IDLE,
@@ -65,6 +67,7 @@ export function withEditor() {
         withState<EditorState>(initialState),
         withEditorToolbar(),
         withSave(),
+        withClient(),
         withComputed((store) => {
             return {
                 $pageData: computed<PageData>(() => {
@@ -85,9 +88,10 @@ export function withEditor() {
                 $reloadEditorContent: computed<ReloadEditorContent>(() => {
                     return {
                         code: store.pageAPIResponse()?.page?.rendered,
-                        isTraditionalPage: store.isTraditionalPage(),
-                        isEditState: store.isEditState(),
-                        isEnterprise: store.isEnterprise()
+                        isClientReady: store.isClientReady(),
+                        isTraditionalPage: untracked(() => store.isTraditionalPage()),
+                        enableInlineEdit:
+                            store.isEditState() && untracked(() => store.isEnterprise())
                     };
                 }),
                 $editorIsInDraggingState: computed<boolean>(
@@ -103,13 +107,16 @@ export function withEditor() {
                     const state = store.state();
                     const params = store.params();
                     const isTraditionalPage = store.isTraditionalPage();
+                    const isClientReady = store.isClientReady();
                     const contentletArea = store.contentletArea();
                     const bounds = store.bounds();
                     const dragItem = store.dragItem();
                     const isEditState = store.isEditState();
-                    const isLoading = store.status() === UVE_STATUS.LOADING;
+                    const isLoading = !isClientReady || store.status() === UVE_STATUS.LOADING;
 
-                    const { dragIsActive, isScrolling, isDragging } = getEditorStates(state);
+                    const isPageReady = isTraditionalPage || isClientReady;
+
+                    const { dragIsActive, isScrolling } = getEditorStates(state);
 
                     const url = sanitizeURL(params?.url);
 
@@ -117,24 +124,26 @@ export function withEditor() {
 
                     const showDialogs = canEditPage && isEditState;
 
-                    const showContentletTools =
+                    const canUserHaveContentletTools =
                         !!contentletArea && canEditPage && isEditState && !isScrolling;
 
-                    const showDropzone = canEditPage && isDragging;
+                    const showDropzone = canEditPage && state === EDITOR_STATE.DRAGGING;
 
                     const showPalette = isEnterprise && canEditPage && isEditState;
 
                     const shouldShowSeoResults = socialMedia && ogTags;
 
+                    const iframeOpacity = isLoading || !isPageReady ? '0.5' : '1';
+                    const origin = params.clientHost || window.location.origin;
+                    const iframeURL = new URL(pageAPIQueryParams, origin);
+
                     return {
                         showDialogs: showDialogs,
                         showEditorContent: !socialMedia,
                         iframe: {
-                            opacity: isLoading ? '0.5' : '1',
+                            opacity: iframeOpacity,
                             pointerEvents: dragIsActive ? 'none' : 'auto',
-                            src: !isTraditionalPage
-                                ? `${params.clientHost}/${pageAPIQueryParams}`
-                                : '',
+                            src: !isTraditionalPage ? iframeURL.href : '',
                             wrapper: device
                                 ? {
                                       width: `${device.cssWidth}${BASE_IFRAME_MEASURE_UNIT}`,
@@ -143,7 +152,7 @@ export function withEditor() {
                                 : null
                         },
                         progressBar: isLoading,
-                        contentletTools: showContentletTools
+                        contentletTools: canUserHaveContentletTools
                             ? {
                                   isEnterprise,
                                   contentletArea,
@@ -176,30 +185,19 @@ export function withEditor() {
         }),
         withMethods((store) => {
             return {
-                updateEditorScrollState() {
-                    // We dont want to change the state if the editor is out of bounds
-                    // The scroll event is triggered after the user leaves the window
-                    // And that is changing the state in an unnatural way
-
-                    // The only way to get out of OUT_OF_BOUNDS is through the mouse over in the editor
-                    if (store.state() === EDITOR_STATE.OUT_OF_BOUNDS) {
-                        return;
-                    }
-
+                setIsClientReady(value: boolean) {
                     patchState(store, {
+                        isClientReady: value
+                    });
+                },
+                updateEditorScrollState() {
+                    patchState(store, {
+                        bounds: [],
+                        contentletArea: null,
                         state: store.dragItem() ? EDITOR_STATE.SCROLL_DRAG : EDITOR_STATE.SCROLLING
                     });
                 },
                 updateEditorOnScrollEnd() {
-                    // We dont want to change the state if the editor is out of bounds
-                    // The scroll end event is triggered after the user leaves the window
-                    // And that is changing the state in an unnatural way
-
-                    // The only way to get out of OUT_OF_BOUNDS is through the mouse over in the editor
-                    if (store.state() === EDITOR_STATE.OUT_OF_BOUNDS) {
-                        return;
-                    }
-
                     patchState(store, {
                         state: store.dragItem() ? EDITOR_STATE.DRAGGING : EDITOR_STATE.IDLE
                     });

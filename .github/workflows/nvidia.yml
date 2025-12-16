@@ -1,0 +1,205 @@
+name: End-to-End Vulnerability Analysis Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo_path:
+        description: 'Path to the dotCMS repo on the remote server (e.g., ~/dotcms-core)'
+        required: true
+        default: '~/vulnerability-analysis' # Assuming this is where the NVIDIA tool is cloned
+      config_filename:
+        description: 'Name of the generated JSON config file'
+        required: true
+        default: 'input_analysis_config.json'
+
+jobs:
+  full-analysis-pipeline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required for committing the generated files
+      
+    # Secrets Check (Ensure these are set up in your repository settings)
+    env:
+      REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+      REMOTE_USER: ${{ secrets.REMOTE_USER }}
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      GHSA_API_KEY: ${{ secrets.GHSA_API_KEY }}
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+      
+    steps:
+      - name: Checkout Repository (Local Copy for File Generation)
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- 1. Install Syft and Trivy (for input file generation) ---
+      - name: Install Syft and Trivy
+        run: |
+          echo "Installing Syft and Trivy..."
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      # --- 2. Generate SBOM (Table Format) ---
+      - name: Generate SBOM in Table Format
+        id: generate_sbom
+        run: |
+          SBOM_PATH="data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom"
+          mkdir -p "$(dirname $SBOM_PATH)"
+          syft fs . -o syft-table > $SBOM_PATH
+          echo "SBOM_PATH_LOCAL=$SBOM_PATH" >> $GITHUB_OUTPUT
+
+      # --- 3. Trivy Vulnerability (CVE) Scanning ---
+      - name: Run Vulnerability Scan (CVEs)
+        run: |
+          trivy fs . --format json --severity CRITICAL,HIGH --output cve-report.json --exit-code 0
+
+      # --- 4. Process and Create JSON Input File ---
+      - name: Install Python and Create JSON Config
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Execute CVE Parsing and JSON Update
+        id: create_config
+        run: |
+          CONFIG_FILE="${{ github.event.inputs.config_filename }}"
+          
+          cat << EOF > update_json_input.py
+          # Python script here (same as previous response, but using the config_filename input)
+          import json
+          TRIVY_REPORT = 'cve-report.json'
+          INPUT_FILE = "$CONFIG_FILE"
+          SBOM_PATH_REMOTE="data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom"
+
+          # Base JSON structure for dotCMS
+          BASE_JSON = {
+            "image": {
+              "name": "docker.io/dotcms/dotcms", "tag": "latest",
+              "source_info": [
+                {
+                    "type": "code", "git_repo": "https://github.com/dotCMS/core.git", "ref": "main",
+                    "include": ["**/pom.xml", "pom.xml", "parent/pom.xml", "build-parent/pom.xml", "bom/pom.xml", "dotCMS/pom.xml", "core-web/pom.xml", "dotcms-integration/pom.xml", "core/src/main/java/**/*", "core/src/main/resources/**/*", "dotCMS/src/main/java/**/*", "dotCMS/src/main/resources/**/*", "dotCMS/WEB-INF/**/*", "dotcms-integration/src/main/java/**/*", "core-web/src/main/java/**/*", "core-web/src/main/resources/**/*", "environments/*/elasticsearch.yml", "environments/*/opensearch.yml", "docker/*/elasticsearch.yml", "config/elasticsearch.yml", "config/opensearch.yml", "dotCMS/src/main/resources/tika-config.xml", "dotCMS/WEB-INF/tika-config.xml", "**/tika-config.xml", "dotCMS/src/main/webapp/WEB-INF/tika-config.xml", "dotCMS/WEB-INF/classes/dotmarketing-config.properties", "dotCMS/src/main/resources/dotmarketing-config.properties", "dotCMS/WEB-INF/classes/dotcms-config-cluster.properties", "**/dotmarketing-config.properties", "**/user.properties", "**/private.xml", "dotCMS/WEB-INF/classes/security.properties", "dotCMS/src/main/resources/security.properties", "**/security-*.properties", "dotCMS/WEB-INF/web.xml", "dotCMS/src/main/webapp/WEB-INF/web.xml", "**/web.xml", "dotCMS/src/main/java/com/dotcms/rest/api/v1/temp/TempFileResource.java", "dotCMS/src/main/java/com/dotcms/rest/ContentResource.java", "dotCMS/src/main/java/com/dotmarketing/servlets/BinaryFileServlet.java", "dotCMS/src/main/java/com/dotmarketing/portlets/fileassets/**/*.java", "dotCMS/src/main/java/com/dotcms/storage/**/*.java", "dotCMS/src/main/java/com/dotmarketing/util/FileUtil.java", "dotCMS/src/main/java/com/dotcms/util/SecurityUtils.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityLogger.java", "dotCMS/src/main/java/com/dotcms/security/**/*.java", "dotCMS/src/main/java/com/dotmarketing/filters/**/*.java", "dotCMS/src/main/java/**/FileUpload*.java", "dotCMS/src/main/java/**/*Upload*.java", "**/src/main/java/**/*FileItem*.java", "dotCMS/src/main/java/com/dotcms/tika/**/*.java", "dotCMS/src/main/java/com/dotmarketing/portlets/contentlet/business/BinaryFileHandler.java", "dotCMS/src/main/java/com/dotmarketing/util/TikaUtils.java", "**/src/main/java/**/*Tika*.java", "**/src/main/java/**/*Parser*.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/ContentletIndexAPI.java", "dotCMS/src/main/java/com/dotmarketing/business/DotIndexer.java", "dotCMS/src/main/java/**/*Index*.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/ESContentletAPIImpl.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/DotRestHighLevelClient.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/ESIndexAPI.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/content/ContentResource.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/elasticsearch/**/*.java", "dotCMS/src/main/java/com/dotcms/graphql/**/*.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/config/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/ESConfigurationFactory.java", "dotCMS/src/main/java/**/*Netty*.java", "dotCMS/src/main/resources/netty-config.xml", "**/netty*.properties", "dotCMS/src/main/java/com/dotmarketing/filters/**/*.java", "dotCMS/src/main/java/com/dotcms/filters/**/*.java", "dotCMS/WEB-INF/classes/filters.xml", "dotCMS/src/main/java/com/dotcms/filters/CorsFilter.java", "dotCMS/src/main/java/com/dotcms/filters/SecurityHeadersFilter.java", "dotCMS/src/main/java/com/dotmarketing/filters/CMSFilter.java", "dotCMS/src/main/java/com/dotcms/auth/**/*.java", "dotCMS/src/main/java/com/dotmarketing/filters/LoginRequiredFilter.java", "dotCMS/src/main/java/com/dotcms/rest/WebResource.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/authentication/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/PermissionAPI.java", "dotCMS/src/main/java/com/dotmarketing/business/PermissionBitAPI.java", "dotCMS/src/main/java/com/dotcms/security/**/*.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/apikey/**/*.java", "dotCMS/src/main/java/com/dotcms/auth/providers/**/*.java", "dotCMS/src/main/java/com/dotcms/security/PasswordDigest.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityUtils.java", "dotCMS/src/main/java/**/*Password*.java", "dotCMS/src/main/java/**/*Crypto*.java", "dotCMS/src/main/java/com/dotmarketing/util/CryptUtils.java", "dotCMS/src/main/java/com/dotcms/util/EncryptionUtil.java", "**/src/main/java/**/*Encrypt*.java", "**/src/main/java/**/*Cipher*.java", "dotCMS/src/main/java/com/dotcms/graphql/**/*.java", "core-web/src/main/java/com/dotcms/graphql/**/*.java", "**/graphql/**/*.java", "docker/Dockerfile", "docker/*/Dockerfile", "docker-compose.yml", "docker/docker-compose*.yml", "environments/*/Dockerfile", "docker/*.env", "docker/*/config/**", "environments/*/.env", ".env.example", "owasp-suppressions.xml", ".github/workflows/*.yml", "cicd/**/*.yml", "cicd/**/*.sh", ".github/dependabot.yml", "renovate.json", ".snyk", "dotCMS/src/test/java/**/*Security*.java", "dotCMS/src/test/java/**/*Permission*.java", "dotcms-integration/src/test/java/**/*Security*.java", "dotcms-integration/src/test/java/**/*Auth*.java", "**/src/test/java/**/*FileUpload*.java", "**/src/test/java/**/*Upload*.java", "**/src/test/java/**/*File*Test.java", "SECURITY.md", "docs/security/**/*.md", "docs/**/*security*.md", "README.md", "docs/examples/**/*.properties", "docs/configuration/**/*.yml", "examples/**/*config*.xml", "dotCMS/src/main/java/com/dotmarketing/util/ValidationUtils.java", "dotCMS/src/main/java/com/dotcms/util/ConversionUtils.java", "dotCMS/src/main/java/**/*Validator*.java", "dotCMS/src/main/java/**/*Sanitizer*.java", "dotCMS/src/main/java/com/dotcms/rendering/velocity/util/XSS*.java", "dotCMS/src/main/java/**/*XSS*.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityLogger.java", "config/user/logging/log4j2.xml", "dotCMS/WEB-INF/classes/log4j2.xml", "**/log4j2*.xml", "dotCMS/src/main/java/com/dotcms/audit/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/AuditableAPI.java", "yarn.lock", "package-lock.json", "**/package.json"
+                    ],
+                    "exclude": ["**/target/**", "**/build/**", "**/node_modules/**", "**/dist/**", "**/*.min.js", "**/src/test/**", "**/src/integration-test/**", "**/.git/**", "**/.gradle/**", "**/docs/**"]
+                },
+                {
+                    "type": "doc", "git_repo": "https://github.com/dotCMS/core.git", "ref": "main",
+                    "include": ["README.md", "LICENSE", "CHANGELOG.md", "SECURITY.md"]
+                }
+              ],
+              "sbom_info": { "_type": "file", "file_path": SBOM_PATH_REMOTE },
+              "dependency_files": ["**/pom.xml", "**/package.json", "yarn.lock", "package-lock.json"],
+              "build_system": "maven"
+            },
+            "scan": { "vulns": [] }
+          }
+          
+          def extract_cve_ids(report_path):
+              cve_ids = set()
+              try:
+                  with open(report_path, 'r') as f: report = json.load(f)
+              except FileNotFoundError: return []
+              for result in report.get('Results', []):
+                  if 'Vulnerabilities' in result:
+                      for vuln in result['Vulnerabilities']: cve_ids.add(vuln.get('VulnerabilityID'))
+              return [{"vuln_id": cve_id} for cve_id in sorted(list(cve_ids)) if cve_id]
+
+          new_vulns_list = extract_cve_ids(TRIVY_REPORT)
+          BASE_JSON['scan']['vulns'] = new_vulns_list
+          
+          with open(INPUT_FILE, 'w') as f:
+              json.dump(BASE_JSON, f, indent=2)
+              
+          print(f"Successfully updated {INPUT_FILE} with {len(new_vulns_list)} unique CVEs.")
+          EOF
+          python update_json_input.py
+          echo "CONFIG_FILE_LOCAL=$CONFIG_FILE" >> $GITHUB_OUTPUT
+          
+      # --- 5. Commit Generated Files to Repo (Optional, but useful for tracking) ---
+      - name: Commit Updated Files to GitHub
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add ${{ steps.generate_sbom.outputs.SBOM_PATH_LOCAL }} ${{ steps.create_config.outputs.CONFIG_FILE_LOCAL }}
+          if ! git diff --cached --exit-code; then
+            git commit -m "🤖 SEC: Automated update of Syft SBOM and vulnerability config [skip ci]"
+            git push
+          else
+            echo "No changes detected in input files. Skipping commit."
+          fi
+          
+      # --- 6. Set up SSH for Remote Execution ---
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Transfer Input Files to Remote Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.REMOTE_HOST }}
+          username: ${{ env.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: ${{ steps.generate_sbom.outputs.SBOM_PATH_LOCAL }},${{ steps.create_config.outputs.CONFIG_FILE_LOCAL }}
+          target: ${{ github.event.inputs.target_repo_path }} # Transfer files to the tool's directory
+
+      - name: Execute NVIDIA Analysis Tool on Remote Server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.REMOTE_HOST }}
+          username: ${{ env.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            REMOTE_PATH="${{ github.event.inputs.target_repo_path }}"
+            CONFIG_FILE="${{ steps.create_config.outputs.CONFIG_FILE_LOCAL }}"
+            
+            # Change directory to the tool's location
+            cd $REMOTE_PATH
+            
+            # 1. Log into NGC (Required to pull base container images)
+            echo "Logging into NGC..."
+            echo "${{ env.NVIDIA_API_KEY }}" | docker login nvcr.io -u '$oauthtoken' --password-stdin
+            
+            # 2. Build the Blueprint containers (if needed)
+            echo "Building Blueprint containers..."
+            docker compose build --no-cache
+            
+            # 3. Run the analysis workflow using the generated configuration file
+            echo "Starting analysis with config: $CONFIG_FILE"
+            docker compose run --rm \
+              -e NVIDIA_API_KEY="${{ env.NVIDIA_API_KEY }}" \
+              -e GHSA_API_KEY="${{ env.GHSA_API_KEY }}" \
+              -e NVD_API_KEY="${{ env.NVD_API_KEY }}" \
+              vuln-analysis nat run --config $CONFIG_FILE
+              
+            # 4. Tar up the results directory
+            RESULTS_DIR="output/"
+            TAR_NAME="analysis_results_$(date +%Y%m%d%H%M%S).tar.gz"
+            if [ -d "$RESULTS_DIR" ]; then
+                tar -czf $TAR_NAME $RESULTS_DIR
+                echo "TARBALL_NAME=$TAR_NAME"
+            else
+                echo "Results directory $RESULTS_DIR not found."
+                exit 1
+            fi
+            
+            # Clean up input files on the remote server
+            rm -f $CONFIG_FILE ${SBOM_PATH}
+
+      # --- 7. Download and Archive Results ---
+      - name: Download Results from Remote Server
+        uses: appleboy/scp-action@v0.1.7
+        id: download_results
+        with:
+          host: ${{ env.REMOTE_HOST }}
+          username: ${{ env.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "${{ github.event.inputs.target_repo_path }}/analysis_results_*.tar.gz" 
+          target: "artifacts"
+
+      - name: Archive Analysis Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerability-analysis-results-${{ github.sha }}
+          path: ./artifacts/
+          if-no-files-found: ignore

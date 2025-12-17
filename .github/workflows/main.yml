@@ -7,55 +7,54 @@ on:
 
 jobs:
   analyze-locally:
+    # This must match the label of your local computer's runner
     runs-on: self-hosted 
 
     env:
-      # Absolute paths on your local machine
+      # Absolute paths on your local machine as requested
       SBOM_DIR: "/home/rashik/vulnerability-analysis/data/sboms/docker.io/dotcms/dotcms"
       INPUT_DIR: "/home/rashik/vulnerability-analysis/data/input_messages"
       TOOL_DIR: "/home/rashik/vulnerability-analysis"
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout dotCMS Repository
         uses: actions/checkout@v4
         with:
           path: dotcms-repo 
 
-      # --- 1. Generate Table SBOM from Container Image ---
+      # --- 1. Generate Table SBOM ---
       - name: Generate Syft SBOM
         run: |
           mkdir -p "${{ env.SBOM_DIR }}"
-          echo "Pulling and Scanning dotCMS Image with Syft..."
-          # Scan the image directly. Redirection (>) handles the file output.
+          echo "Scanning dotCMS Image with Syft..."
+          # Scans the image context to satisfy the tool's requirement
           syft docker.io/dotcms/dotcms:latest -o syft-table > "${{ env.SBOM_DIR }}/dotcms.sbom"
-          echo "SBOM saved successfully to ${{ env.SBOM_DIR }}/dotcms.sbom"
+          echo "SBOM saved to ${{ env.SBOM_DIR }}/dotcms.sbom"
 
       # --- 2. Generate Trivy CVE Report ---
       - name: Run Trivy Scan
         run: |
-          echo "Scanning for High/Critical vulnerabilities..."
-          # We scan the image with Trivy as well for consistency with the SBOM
+          echo "Running Trivy Vulnerability Scan..."
           trivy image docker.io/dotcms/dotcms:latest --format json --severity CRITICAL,HIGH --output cve-report.json
 
-      # --- 3. Update input.json ---
+      # --- 3. Update input.json (NVIDIA Tool Input) ---
       - name: Update input.json
         shell: python
         run: |
           import json
           import os
 
-          # Read Trivy results
+          # Read local Trivy results
           with open('cve-report.json') as f:
               report = json.load(f)
           
           cves = []
-          # Extract unique Vulnerability IDs
           for res in report.get('Results', []):
               if 'Vulnerabilities' in res:
                   for v in res['Vulnerabilities']:
                       cves.append({"vuln_id": v['VulnerabilityID']})
 
-          # Construct the specific NVIDIA Blueprint config
+          # Construct configuration matching the NVIDIA Blueprint spec
           config = {
             "image": {
               "name": "docker.io/dotcms/dotcms",
@@ -71,6 +70,7 @@ jobs:
               ],
               "sbom_info": {
                 "_type": "file",
+                # Path relative to the tool's data directory inside the container
                 "file_path": "data/sboms/docker.io/dotcms/dotcms/dotcms.sbom"
               },
               "dependency_files": ["**/pom.xml", "package.json"],
@@ -79,12 +79,14 @@ jobs:
             "scan": { "vulns": cves }
           }
 
+          # Ensure input directory exists and write input.json
+          os.makedirs("${{ env.INPUT_DIR }}", exist_ok=True)
           input_file_path = os.path.join("${{ env.INPUT_DIR }}", "input.json")
           with open(input_file_path, 'w') as f:
               json.dump(config, f, indent=2)
-          print(f"Updated {input_file_path} with {len(cves)} CVEs.")
+          print(f"Successfully generated {input_file_path} with {len(cves)} CVEs.")
 
-      # --- 4. Run NVIDIA Analysis Tool ---
+      # --- 4. Start Services and Execute NVIDIA AI Analysis ---
       - name: Run NVIDIA Analysis
         working-directory: ${{ env.TOOL_DIR }}
         env:
@@ -93,21 +95,33 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
           SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
         run: |
-          # Registry login for NGC
+          # 1. Login to NVIDIA Container Registry
+          echo "Logging into NVIDIA NGC..."
           echo "$NVIDIA_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
           
-          # Execute the NVIDIA blueprint tool using docker-compose
-          # The tool maps its local 'data' folder to the internal container path.
-          docker compose run --rm \
-            -e NVIDIA_API_KEY=$NVIDIA_API_KEY \
-            -e GHSA_API_KEY=$GHSA_API_KEY \
-            -e NVD_API_KEY=$NVD_API_KEY \
-            -e SERPAPI_API_KEY=$SERPAPI_API_KEY \
-            vuln-analysis nat run --config data/input_messages/input.json
+          # 2. Start all blueprint services in background
+          echo "Bringing up Docker Compose stack..."
+          docker compose up -d
+          
+          # 3. Brief wait for containers to initialize
+          echo "Waiting for services to settle..."
+          sleep 15
+          
+          # 4. Execute the agentic analysis inside the vuln-analysis container
+          # We use the corrected flag structure: --config_file and --input_file
+          # -T flag is used to run in non-interactive mode for CI/CD
+          echo "Executing nat run agent..."
+          docker compose exec -T vuln-analysis nat run \
+            --config_file=configs/config.yml \
+            --input_file=data/input_messages/input.json
+            
+          # 5. Optional: Clean up to release GPU memory (comment out if you want containers to stay up)
+          # docker compose down
 
-      # --- 5. Upload Results to GitHub UI ---
-      - name: Upload Results
+      # --- 5. Upload Analysis Output ---
+      - name: Upload Analysis Report
         uses: actions/upload-artifact@v4
         with:
-          name: dotcms-vulnerability-report
+          name: dotcms-ai-vulnerability-analysis
+          # Path to where the tool writes final summaries
           path: ${{ env.TOOL_DIR }}/output/

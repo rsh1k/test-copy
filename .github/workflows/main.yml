@@ -13,7 +13,6 @@ jobs:
       SBOM_DIR: "/home/rashik/vulnerability-analysis/data/sboms/docker.io/dotcms/dotcms"
       INPUT_DIR: "/home/rashik/vulnerability-analysis/data/input_messages"
       TOOL_DIR: "/home/rashik/vulnerability-analysis"
-      REPORT_SRC: "/home/rashik/vulnerability-analysis/.tmp/vulnerability_markdown_reports/vulnerability_reports_dotcms_latest"
 
     steps:
       - name: Checkout dotCMS Repository
@@ -24,38 +23,93 @@ jobs:
       - name: Generate Syft SBOM
         run: |
           mkdir -p "${{ env.SBOM_DIR }}"
+          echo "Scanning dotCMS Image with Syft..."
           syft docker.io/dotcms/dotcms:latest -o syft-table > "${{ env.SBOM_DIR }}/dotcms.sbom"
 
       - name: Run Trivy Scan
         run: |
           trivy image docker.io/dotcms/dotcms:latest --format json --severity CRITICAL,HIGH --output cve-report.json
 
-      - name: Update input.json
+      - name: Update input.json with Specific File Filters
         shell: python
         run: |
-          import json, os
+          import json
+          import os
+
           with open('cve-report.json') as f:
               report = json.load(f)
+          
           cves = [{"vuln_id": v['VulnerabilityID']} for res in report.get('Results', []) for v in res.get('Vulnerabilities', [])]
+
           config = {
             "image": {
-              "name": "docker.io/dotcms/dotcms", "tag": "latest",
+              "name": "docker.io/dotcms/dotcms",
+              "tag": "latest",
               "source_info": [
                 {
-                  "type": "code", "git_repo": "https://github.com/dotCMS/core.git", "ref": "main",
-                  "include": ["**/pom.xml", "pom.xml", "parent/pom.xml", "build-parent/pom.xml", "bom/pom.xml", "dotCMS/pom.xml", "core-web/pom.xml", "dotcms-integration/pom.xml", "core/src/main/java/**/*", "core/src/main/resources/**/*", "dotCMS/src/main/java/**/*", "dotCMS/src/main/resources/**/*", "dotCMS/WEB-INF/**/*", "dotcms-integration/src/main/java/**/*", "core-web/src/main/java/**/*", "core-web/src/main/resources/**/*", "environments/*/elasticsearch.yml", "environments/*/opensearch.yml", "docker/*/elasticsearch.yml", "config/elasticsearch.yml", "config/opensearch.yml", "dotCMS/src/main/resources/tika-config.xml", "dotCMS/WEB-INF/tika-config.xml", "**/tika-config.xml", "dotCMS/src/main/webapp/WEB-INF/tika-config.xml", "dotCMS/WEB-INF/classes/dotmarketing-config.properties", "dotCMS/src/main/resources/dotmarketing-config.properties", "dotCMS/WEB-INF/classes/dotcms-config-cluster.properties", "**/dotmarketing-config.properties", "**/user.properties", "**/private.xml", "dotCMS/WEB-INF/classes/security.properties", "dotCMS/src/main/resources/security.properties", "**/security-*.properties", "dotCMS/WEB-INF/web.xml", "dotCMS/src/main/webapp/WEB-INF/web.xml", "**/web.xml", "dotCMS/src/main/java/com/dotcms/rest/api/v1/temp/TempFileResource.java", "dotCMS/src/main/java/com/dotcms/rest/ContentResource.java", "dotCMS/src/main/java/com/dotmarketing/servlets/BinaryFileServlet.java", "dotCMS/src/main/java/com/dotmarketing/portlets/fileassets/**/*.java", "dotCMS/src/main/java/com/dotcms/storage/**/*.java", "dotCMS/src/main/java/com/dotmarketing/util/FileUtil.java", "dotCMS/src/main/java/com/dotcms/util/SecurityUtils.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityLogger.java", "dotCMS/src/main/java/com/dotcms/security/**/*.java", "dotCMS/src/main/java/com/dotmarketing/filters/**/*.java", "dotCMS/src/main/java/**/FileUpload*.java", "dotCMS/src/main/java/**/*Upload*.java", "**/src/main/java/**/*FileItem*.java", "dotCMS/src/main/java/com/dotcms/tika/**/*.java", "dotCMS/src/main/java/com/dotmarketing/portlets/contentlet/business/BinaryFileHandler.java", "dotCMS/src/main/java/com/dotmarketing/util/TikaUtils.java", "**/src/main/java/**/*Tika*.java", "**/src/main/java/**/*Parser*.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/ContentletIndexAPI.java", "dotCMS/src/main/java/com/dotmarketing/business/DotIndexer.java", "dotCMS/src/main/java/**/*Index*.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/ESContentletAPIImpl.py", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/DotRestHighLevelClient.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/ESIndexAPI.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/content/ContentResource.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/elasticsearch/**/*.java", "dotCMS/src/main/java/com/dotcms/graphql/**/*.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/config/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/ESConfigurationFactory.java", "dotCMS/src/main/java/**/*Netty*.java", "dotCMS/src/main/resources/netty-config.xml", "**/netty*.properties", "dotCMS/src/main/java/com/dotmarketing/filters/**/*.java", "dotCMS/src/main/java/com/dotcms/filters/**/*.java", "dotCMS/WEB-INF/classes/filters.xml", "dotCMS/src/main/java/com/dotcms/filters/CorsFilter.java", "dotCMS/src/main/java/com/dotcms/filters/SecurityHeadersFilter.java", "dotCMS/src/main/java/com/dotmarketing/filters/CMSFilter.java", "dotCMS/src/main/java/com/dotcms/auth/**/*.java", "dotCMS/src/main/java/com/dotmarketing/filters/LoginRequiredFilter.java", "dotCMS/src/main/java/com/dotcms/rest/WebResource.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/authentication/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/PermissionAPI.java", "dotCMS/src/main/java/com/dotmarketing/business/PermissionBitAPI.java", "dotCMS/src/main/java/com/dotcms/security/**/*.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/apikey/**/*.java", "dotCMS/src/main/java/com/dotcms/auth/providers/**/*.java", "dotCMS/src/main/java/com/dotcms/security/PasswordDigest.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityUtils.java", "dotCMS/src/main/java/**/*Password*.java", "dotCMS/src/main/java/**/*Crypto*.java", "dotCMS/src/main/java/com/dotmarketing/util/CryptUtils.java", "dotCMS/src/main/java/com/dotcms/util/EncryptionUtil.java", "**/src/main/java/**/*Encrypt*.java", "**/src/main/java/**/*Cipher*.java", "dotCMS/src/main/java/com/dotcms/graphql/**/*.java", "core-web/src/main/java/com/dotcms/graphql/**/*.java", "**/graphql/**/*.java", "docker/Dockerfile", "docker/*/Dockerfile", "docker-compose.yml", "docker/docker-compose*.yml", "environments/*/Dockerfile", "docker/*.env", "docker/*/config/**", "environments/*/.env", ".env.example", "owasp-suppressions.xml", ".github/workflows/*.yml", "cicd/**/*.yml", "cicd/**/*.sh", ".github/dependabot.yml", "renovate.json", ".snyk", "dotCMS/src/test/java/**/*Security*.java", "dotCMS/src/test/java/**/*Permission*.java", "dotcms-integration/src/test/java/**/*Security*.java", "dotcms-integration/src/test/java/**/*Auth*.java", "**/src/test/java/**/*FileUpload*.java", "**/src/test/java/**/*Upload*.java", "**/src/test/java/**/*File*Test.java", "SECURITY.md", "docs/security/**/*.md", "docs/**/*security*.md", "README.md", "docs/examples/**/*.properties", "docs/configuration/**/*.yml", "examples/**/*config*.xml", "dotCMS/src/main/java/com/dotmarketing/util/ValidationUtils.java", "dotCMS/src/main/java/com/dotcms/util/ConversionUtils.java", "dotCMS/src/main/java/**/*Validator*.java", "dotCMS/src/main/java/**/*Sanitizer*.java", "dotCMS/src/main/java/com/dotcms/rendering/velocity/util/XSS*.java", "dotCMS/src/main/java/**/*XSS*.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityLogger.java", "config/user/logging/log4j2.xml", "dotCMS/WEB-INF/classes/log4j2.xml", "**/log4j2*.xml", "dotCMS/src/main/java/com/dotcms/audit/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/AuditableAPI.java", "yarn.lock", "package-lock.json", "**/package.json"
+                  "type": "code",
+                  "git_repo": "https://github.com/dotCMS/core.git",
+                  "ref": "main",
+                  "include": [
+                    "**/pom.xml", "pom.xml", "parent/pom.xml", "build-parent/pom.xml", "bom/pom.xml", "dotCMS/pom.xml", "core-web/pom.xml", "dotcms-integration/pom.xml", 
+                    "core/src/main/java/**/*", "core/src/main/resources/**/*", "dotCMS/src/main/java/**/*", "dotCMS/src/main/resources/**/*", "dotCMS/WEB-INF/**/*", 
+                    "dotcms-integration/src/main/java/**/*", "core-web/src/main/java/**/*", "core-web/src/main/resources/**/*", "environments/*/elasticsearch.yml", 
+                    "environments/*/opensearch.yml", "docker/*/elasticsearch.yml", "config/elasticsearch.yml", "config/opensearch.yml", "dotCMS/src/main/resources/tika-config.xml", 
+                    "dotCMS/WEB-INF/tika-config.xml", "**/tika-config.xml", "dotCMS/src/main/webapp/WEB-INF/tika-config.xml", "dotCMS/WEB-INF/classes/dotmarketing-config.properties", 
+                    "dotCMS/src/main/resources/dotmarketing-config.properties", "dotCMS/WEB-INF/classes/dotcms-config-cluster.properties", "**/dotmarketing-config.properties", 
+                    "**/user.properties", "**/private.xml", "dotCMS/WEB-INF/classes/security.properties", "dotCMS/src/main/resources/security.properties", "**/security-*.properties", 
+                    "dotCMS/WEB-INF/web.xml", "dotCMS/src/main/webapp/WEB-INF/web.xml", "**/web.xml", "dotCMS/src/main/java/com/dotcms/rest/api/v1/temp/TempFileResource.java", 
+                    "dotCMS/src/main/java/com/dotcms/rest/ContentResource.java", "dotCMS/src/main/java/com/dotmarketing/servlets/BinaryFileServlet.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/portlets/fileassets/**/*.java", "dotCMS/src/main/java/com/dotcms/storage/**/*.java", "dotCMS/src/main/java/com/dotmarketing/util/FileUtil.java", 
+                    "dotCMS/src/main/java/com/dotcms/util/SecurityUtils.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityLogger.java", "dotCMS/src/main/java/com/dotcms/security/**/*.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/filters/**/*.java", "dotCMS/src/main/java/**/FileUpload*.java", "dotCMS/src/main/java/**/*Upload*.java", "**/src/main/java/**/*FileItem*.java", 
+                    "dotCMS/src/main/java/com/dotcms/tika/**/*.java", "dotCMS/src/main/java/com/dotmarketing/portlets/contentlet/business/BinaryFileHandler.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/util/TikaUtils.java", "**/src/main/java/**/*Tika*.java", "**/src/main/java/**/*Parser*.java", 
+                    "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/ContentletIndexAPI.java", "dotCMS/src/main/java/com/dotmarketing/business/DotIndexer.java", 
+                    "dotCMS/src/main/java/**/*Index*.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/ESContentletAPIImpl.java", 
+                    "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/DotRestHighLevelClient.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/**/*.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/business/ESIndexAPI.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/content/ContentResource.java", 
+                    "dotCMS/src/main/java/com/dotcms/rest/api/v1/elasticsearch/**/*.java", "dotCMS/src/main/java/com/dotcms/graphql/**/*.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/config/**/*.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/business/ESConfigurationFactory.java", "dotCMS/src/main/java/**/*Netty*.java", "dotCMS/src/main/resources/netty-config.xml", "**/netty*.properties", 
+                    "dotCMS/src/main/java/com/dotmarketing/filters/**/*.java", "dotCMS/src/main/java/com/dotcms/filters/**/*.java", "dotCMS/WEB-INF/classes/filters.xml", 
+                    "dotCMS/src/main/java/com/dotcms/filters/CorsFilter.java", "dotCMS/src/main/java/com/dotcms/filters/SecurityHeadersFilter.java", "dotCMS/src/main/java/com/dotmarketing/filters/CMSFilter.java", 
+                    "dotCMS/src/main/java/com/dotcms/auth/**/*.java", "dotCMS/src/main/java/com/dotmarketing/filters/LoginRequiredFilter.java", "dotCMS/src/main/java/com/dotcms/rest/WebResource.java", 
+                    "dotCMS/src/main/java/com/dotcms/rest/api/v1/authentication/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/PermissionAPI.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/business/PermissionBitAPI.java", "dotCMS/src/main/java/com/dotcms/security/**/*.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/apikey/**/*.java", 
+                    "dotCMS/src/main/java/com/dotcms/auth/providers/**/*.java", "dotCMS/src/main/java/com/dotcms/security/PasswordDigest.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityUtils.java", 
+                    "dotCMS/src/main/java/**/*Password*.java", "dotCMS/src/main/java/**/*Crypto*.java", "dotCMS/src/main/java/com/dotmarketing/util/CryptUtils.java", 
+                    "dotCMS/src/main/java/com/dotcms/util/EncryptionUtil.java", "**/src/main/java/**/*Encrypt*.java", "**/src/main/java/**/*Cipher*.java", "dotCMS/src/main/java/com/dotcms/graphql/**/*.java", 
+                    "core-web/src/main/java/com/dotcms/graphql/**/*.java", "**/graphql/**/*.java", "docker/Dockerfile", "docker/*/Dockerfile", "docker-compose.yml", "docker/docker-compose*.yml", 
+                    "environments/*/Dockerfile", "docker/*.env", "docker/*/config/**", "environments/*/.env", ".env.example", "owasp-suppressions.xml", ".github/workflows/*.yml", 
+                    "cicd/**/*.yml", "cicd/**/*.sh", ".github/dependabot.yml", "renovate.json", ".snyk", "dotCMS/src/test/java/**/*Security*.java", "dotCMS/src/test/java/**/*Permission*.java", 
+                    "dotcms-integration/src/test/java/**/*Security*.java", "dotcms-integration/src/test/java/**/*Auth*.java", "**/src/test/java/**/*FileUpload*.java", "**/src/test/java/**/*Upload*.java", 
+                    "**/src/test/java/**/*File*Test.java", "SECURITY.md", "docs/security/**/*.md", "docs/**/*security*.md", "README.md", "docs/examples/**/*.properties", "docs/configuration/**/*.yml", 
+                    "examples/**/*config*.xml", "dotCMS/src/main/java/com/dotmarketing/util/ValidationUtils.java", "dotCMS/src/main/java/com/dotcms/util/ConversionUtils.py", 
+                    "dotCMS/src/main/java/**/*Validator*.java", "dotCMS/src/main/java/**/*Sanitizer*.java", "dotCMS/src/main/java/com/dotcms/rendering/velocity/util/XSS*.java", 
+                    "dotCMS/src/main/java/**/*XSS*.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityLogger.java", "config/user/logging/log4j2.xml", "dotCMS/WEB-INF/classes/log4j2.xml", 
+                    "**/log4j2*.xml", "dotCMS/src/main/java/com/dotcms/audit/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/AuditableAPI.java", "yarn.lock", "package-lock.json", "**/package.json"
                   ],
                   "exclude": [
                     "**/target/**", "**/build/**", "**/node_modules/**", "**/dist/**", "**/*.min.js", "**/src/test/**", "**/src/integration-test/**", "**/.git/**", "**/.gradle/**", "**/docs/**"
                   ]
+                },
+                {
+                  "type": "doc",
+                  "git_repo": "https://github.com/dotCMS/core.git",
+                  "ref": "main",
+                  "include": ["README.md", "LICENSE", "CHANGELOG.md", "SECURITY.md"]
                 }
               ],
-              "sbom_info": { "_type": "file", "file_path": "data/sboms/docker.io/dotcms/dotcms/dotcms.sbom" },
+              "sbom_info": {
+                "_type": "file",
+                "file_path": "data/sboms/docker.io/dotcms/dotcms/dotcms.sbom"
+              },
               "dependency_files": ["**/pom.xml", "**/package.json", "yarn.lock", "package-lock.json"],
               "build_system": "maven"
             },
             "scan": { "vulns": cves }
           }
+
           os.makedirs("${{ env.INPUT_DIR }}", exist_ok=True)
           with open(os.path.join("${{ env.INPUT_DIR }}", "input.json"), 'w') as f:
               json.dump(config, f, indent=2)
@@ -75,42 +129,8 @@ jobs:
             --config_file=configs/config.yml \
             --input_file=data/input_messages/input.json
 
-      # --- NEW: Write Markdown Reports Directly to GitHub Summary ---
-      - name: Generate GitHub Job Summary
-        shell: python
-        run: |
-          import os
-          import json
-
-          src_dir = "${{ env.REPORT_SRC }}"
-          summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
-          
-          with open(summary_file, 'a') as summary:
-              summary.write("# 🛡️ dotCMS AI Vulnerability Analysis Summary\n\n")
-              
-              if not os.path.exists(src_dir):
-                  summary.write("❌ No reports found in the output directory.\n")
-              else:
-                  # Get all markdown reports
-                  files = sorted([f for f in os.listdir(src_dir) if f.endswith('.md')])
-                  
-                  if not files:
-                      summary.write("✅ No vulnerabilities were flagged for analysis.\n")
-                  else:
-                      for f_name in files:
-                          cve_id = f_name.replace('report_', '').replace('.md', '')
-                          summary.write(f"## Analysis for {cve_id}\n")
-                          
-                          # Read the content of each report and inject it into the summary
-                          with open(os.path.join(src_dir, f_name), 'r') as report_content:
-                              # Using a collapsible section (details) to keep the page tidy
-                              summary.write("<details>\n")
-                              summary.write(f"<summary>Click to view full AI reasoning for {cve_id}</summary>\n\n")
-                              summary.write(report_content.read())
-                              summary.write("\n</details>\n\n---\n")
-
-      - name: Upload Artifacts (Back-up)
+      - name: Upload Results
         uses: actions/upload-artifact@v4
         with:
-          name: dotcms-reports
-          path: ${{ env.REPORT_SRC }}
+          name: dotcms-ai-analysis
+          path: ${{ env.TOOL_DIR }}/output/

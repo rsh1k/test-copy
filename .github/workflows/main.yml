@@ -10,33 +10,34 @@ jobs:
     runs-on: self-hosted 
 
     env:
-      # Simple, clean paths
+      # Absolute paths on your local machine
       SBOM_DIR: "/home/rashik/vulnerability-analysis/data/sboms/docker.io/dotcms/dotcms"
       INPUT_DIR: "/home/rashik/vulnerability-analysis/data/input_messages"
       TOOL_DIR: "/home/rashik/vulnerability-analysis"
 
     steps:
-      - name: Checkout dotCMS Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           path: dotcms-repo 
 
-      # --- 1. Generate Table SBOM (Simplified Filename) ---
+      # --- 1. Generate Table SBOM from Container Image ---
       - name: Generate Syft SBOM
         run: |
           mkdir -p "${{ env.SBOM_DIR }}"
-          echo "Scanning code with Syft..."
-          # Changed dotcms:latest.sbom -> dotcms.sbom to fix the "received 2 args" error
-          syft fs ./dotcms-repo -o syft-table > "${{ env.SBOM_DIR }}/dotcms.sbom"
-          echo "SBOM saved successfully."
+          echo "Pulling and Scanning dotCMS Image with Syft..."
+          # Scan the image directly. Redirection (>) handles the file output.
+          syft docker.io/dotcms/dotcms:latest -o syft-table > "${{ env.SBOM_DIR }}/dotcms.sbom"
+          echo "SBOM saved successfully to ${{ env.SBOM_DIR }}/dotcms.sbom"
 
       # --- 2. Generate Trivy CVE Report ---
       - name: Run Trivy Scan
         run: |
           echo "Scanning for High/Critical vulnerabilities..."
-          trivy fs ./dotcms-repo --format json --severity CRITICAL,HIGH --output cve-report.json
+          # We scan the image with Trivy as well for consistency with the SBOM
+          trivy image docker.io/dotcms/dotcms:latest --format json --severity CRITICAL,HIGH --output cve-report.json
 
-      # --- 3. Update input.json (Matches the new SBOM name) ---
+      # --- 3. Update input.json ---
       - name: Update input.json
         shell: python
         run: |
@@ -48,11 +49,13 @@ jobs:
               report = json.load(f)
           
           cves = []
+          # Extract unique Vulnerability IDs
           for res in report.get('Results', []):
-              for v in res.get('Vulnerabilities', []):
-                  cves.append({"vuln_id": v['VulnerabilityID']})
+              if 'Vulnerabilities' in res:
+                  for v in res['Vulnerabilities']:
+                      cves.append({"vuln_id": v['VulnerabilityID']})
 
-          # Construct configuration
+          # Construct the specific NVIDIA Blueprint config
           config = {
             "image": {
               "name": "docker.io/dotcms/dotcms",
@@ -68,7 +71,6 @@ jobs:
               ],
               "sbom_info": {
                 "_type": "file",
-                # This must match the filename used in the Syft step above
                 "file_path": "data/sboms/docker.io/dotcms/dotcms/dotcms.sbom"
               },
               "dependency_files": ["**/pom.xml", "package.json"],
@@ -91,10 +93,11 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
           SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
         run: |
-          # Registry login
+          # Registry login for NGC
           echo "$NVIDIA_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
           
-          # Execute the blueprint tool
+          # Execute the NVIDIA blueprint tool using docker-compose
+          # The tool maps its local 'data' folder to the internal container path.
           docker compose run --rm \
             -e NVIDIA_API_KEY=$NVIDIA_API_KEY \
             -e GHSA_API_KEY=$GHSA_API_KEY \
@@ -102,6 +105,7 @@ jobs:
             -e SERPAPI_API_KEY=$SERPAPI_API_KEY \
             vuln-analysis nat run --config data/input_messages/input.json
 
+      # --- 5. Upload Results to GitHub UI ---
       - name: Upload Results
         uses: actions/upload-artifact@v4
         with:

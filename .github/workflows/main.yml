@@ -22,8 +22,15 @@ jobs:
 
       - name: Generate Syft SBOM
         run: |
-          mkdir -p "${{ env.SBOM_DIR }}"
-          syft fs ./dotcms-repo -o syft-table > "${{ env.SBOM_DIR }}/dotcms:latest.sbom"
+                # 1. Create the directory (ensure quotes here too)
+                mkdir -p "${{ env.SBOM_DIR }}"
+                
+                # 2. Run syft with quotes around the redirect target
+                echo "Scanning ./dotcms-repo..."
+                syft fs ./dotcms-repo -o syft-table > "${{ env.SBOM_DIR }}/dotcms:latest.sbom"
+                
+                # 3. Verify the file was created
+                ls -lh "${{ env.SBOM_DIR }}/dotcms:latest.sbom"
 
       - name: Run Trivy Scan
         run: |

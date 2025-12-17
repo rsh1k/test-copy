@@ -7,11 +7,9 @@ on:
 
 jobs:
   analyze-locally:
-    # This must match the label of your local computer's runner
     runs-on: self-hosted 
 
     env:
-      # Absolute paths on your local machine as requested
       SBOM_DIR: "/home/rashik/vulnerability-analysis/data/sboms/docker.io/dotcms/dotcms"
       INPUT_DIR: "/home/rashik/vulnerability-analysis/data/input_messages"
       TOOL_DIR: "/home/rashik/vulnerability-analysis"
@@ -22,39 +20,27 @@ jobs:
         with:
           path: dotcms-repo 
 
-      # --- 1. Generate Table SBOM ---
       - name: Generate Syft SBOM
         run: |
           mkdir -p "${{ env.SBOM_DIR }}"
           echo "Scanning dotCMS Image with Syft..."
-          # Scans the image context to satisfy the tool's requirement
           syft docker.io/dotcms/dotcms:latest -o syft-table > "${{ env.SBOM_DIR }}/dotcms.sbom"
-          echo "SBOM saved to ${{ env.SBOM_DIR }}/dotcms.sbom"
 
-      # --- 2. Generate Trivy CVE Report ---
       - name: Run Trivy Scan
         run: |
-          echo "Running Trivy Vulnerability Scan..."
           trivy image docker.io/dotcms/dotcms:latest --format json --severity CRITICAL,HIGH --output cve-report.json
 
-      # --- 3. Update input.json (NVIDIA Tool Input) ---
-      - name: Update input.json
+      - name: Update input.json with Specific File Filters
         shell: python
         run: |
           import json
           import os
 
-          # Read local Trivy results
           with open('cve-report.json') as f:
               report = json.load(f)
           
-          cves = []
-          for res in report.get('Results', []):
-              if 'Vulnerabilities' in res:
-                  for v in res['Vulnerabilities']:
-                      cves.append({"vuln_id": v['VulnerabilityID']})
+          cves = [{"vuln_id": v['VulnerabilityID']} for res in report.get('Results', []) for v in res.get('Vulnerabilities', [])]
 
-          # Construct configuration matching the NVIDIA Blueprint spec
           config = {
             "image": {
               "name": "docker.io/dotcms/dotcms",
@@ -64,30 +50,71 @@ jobs:
                   "type": "code",
                   "git_repo": "https://github.com/dotCMS/core.git",
                   "ref": "main",
-                  "include": ["**/*"],
-                  "exclude": ["**/target/**"]
+                  "include": [
+                    "**/pom.xml", "pom.xml", "parent/pom.xml", "build-parent/pom.xml", "bom/pom.xml", "dotCMS/pom.xml", "core-web/pom.xml", "dotcms-integration/pom.xml", 
+                    "core/src/main/java/**/*", "core/src/main/resources/**/*", "dotCMS/src/main/java/**/*", "dotCMS/src/main/resources/**/*", "dotCMS/WEB-INF/**/*", 
+                    "dotcms-integration/src/main/java/**/*", "core-web/src/main/java/**/*", "core-web/src/main/resources/**/*", "environments/*/elasticsearch.yml", 
+                    "environments/*/opensearch.yml", "docker/*/elasticsearch.yml", "config/elasticsearch.yml", "config/opensearch.yml", "dotCMS/src/main/resources/tika-config.xml", 
+                    "dotCMS/WEB-INF/tika-config.xml", "**/tika-config.xml", "dotCMS/src/main/webapp/WEB-INF/tika-config.xml", "dotCMS/WEB-INF/classes/dotmarketing-config.properties", 
+                    "dotCMS/src/main/resources/dotmarketing-config.properties", "dotCMS/WEB-INF/classes/dotcms-config-cluster.properties", "**/dotmarketing-config.properties", 
+                    "**/user.properties", "**/private.xml", "dotCMS/WEB-INF/classes/security.properties", "dotCMS/src/main/resources/security.properties", "**/security-*.properties", 
+                    "dotCMS/WEB-INF/web.xml", "dotCMS/src/main/webapp/WEB-INF/web.xml", "**/web.xml", "dotCMS/src/main/java/com/dotcms/rest/api/v1/temp/TempFileResource.java", 
+                    "dotCMS/src/main/java/com/dotcms/rest/ContentResource.java", "dotCMS/src/main/java/com/dotmarketing/servlets/BinaryFileServlet.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/portlets/fileassets/**/*.java", "dotCMS/src/main/java/com/dotcms/storage/**/*.java", "dotCMS/src/main/java/com/dotmarketing/util/FileUtil.java", 
+                    "dotCMS/src/main/java/com/dotcms/util/SecurityUtils.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityLogger.java", "dotCMS/src/main/java/com/dotcms/security/**/*.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/filters/**/*.java", "dotCMS/src/main/java/**/FileUpload*.java", "dotCMS/src/main/java/**/*Upload*.java", "**/src/main/java/**/*FileItem*.java", 
+                    "dotCMS/src/main/java/com/dotcms/tika/**/*.java", "dotCMS/src/main/java/com/dotmarketing/portlets/contentlet/business/BinaryFileHandler.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/util/TikaUtils.java", "**/src/main/java/**/*Tika*.java", "**/src/main/java/**/*Parser*.java", 
+                    "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/ContentletIndexAPI.java", "dotCMS/src/main/java/com/dotmarketing/business/DotIndexer.java", 
+                    "dotCMS/src/main/java/**/*Index*.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/ESContentletAPIImpl.java", 
+                    "dotCMS/src/main/java/com/dotcms/content/elasticsearch/business/DotRestHighLevelClient.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/**/*.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/business/ESIndexAPI.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/content/ContentResource.java", 
+                    "dotCMS/src/main/java/com/dotcms/rest/api/v1/elasticsearch/**/*.java", "dotCMS/src/main/java/com/dotcms/graphql/**/*.java", "dotCMS/src/main/java/com/dotcms/content/elasticsearch/config/**/*.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/business/ESConfigurationFactory.java", "dotCMS/src/main/java/**/*Netty*.java", "dotCMS/src/main/resources/netty-config.xml", "**/netty*.properties", 
+                    "dotCMS/src/main/java/com/dotmarketing/filters/**/*.java", "dotCMS/src/main/java/com/dotcms/filters/**/*.java", "dotCMS/WEB-INF/classes/filters.xml", 
+                    "dotCMS/src/main/java/com/dotcms/filters/CorsFilter.java", "dotCMS/src/main/java/com/dotcms/filters/SecurityHeadersFilter.java", "dotCMS/src/main/java/com/dotmarketing/filters/CMSFilter.java", 
+                    "dotCMS/src/main/java/com/dotcms/auth/**/*.java", "dotCMS/src/main/java/com/dotmarketing/filters/LoginRequiredFilter.java", "dotCMS/src/main/java/com/dotcms/rest/WebResource.java", 
+                    "dotCMS/src/main/java/com/dotcms/rest/api/v1/authentication/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/PermissionAPI.java", 
+                    "dotCMS/src/main/java/com/dotmarketing/business/PermissionBitAPI.java", "dotCMS/src/main/java/com/dotcms/security/**/*.java", "dotCMS/src/main/java/com/dotcms/rest/api/v1/apikey/**/*.java", 
+                    "dotCMS/src/main/java/com/dotcms/auth/providers/**/*.java", "dotCMS/src/main/java/com/dotcms/security/PasswordDigest.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityUtils.java", 
+                    "dotCMS/src/main/java/**/*Password*.java", "dotCMS/src/main/java/**/*Crypto*.java", "dotCMS/src/main/java/com/dotmarketing/util/CryptUtils.java", 
+                    "dotCMS/src/main/java/com/dotcms/util/EncryptionUtil.java", "**/src/main/java/**/*Encrypt*.java", "**/src/main/java/**/*Cipher*.java", "dotCMS/src/main/java/com/dotcms/graphql/**/*.java", 
+                    "core-web/src/main/java/com/dotcms/graphql/**/*.java", "**/graphql/**/*.java", "docker/Dockerfile", "docker/*/Dockerfile", "docker-compose.yml", "docker/docker-compose*.yml", 
+                    "environments/*/Dockerfile", "docker/*.env", "docker/*/config/**", "environments/*/.env", ".env.example", "owasp-suppressions.xml", ".github/workflows/*.yml", 
+                    "cicd/**/*.yml", "cicd/**/*.sh", ".github/dependabot.yml", "renovate.json", ".snyk", "dotCMS/src/test/java/**/*Security*.java", "dotCMS/src/test/java/**/*Permission*.java", 
+                    "dotcms-integration/src/test/java/**/*Security*.java", "dotcms-integration/src/test/java/**/*Auth*.java", "**/src/test/java/**/*FileUpload*.java", "**/src/test/java/**/*Upload*.java", 
+                    "**/src/test/java/**/*File*Test.java", "SECURITY.md", "docs/security/**/*.md", "docs/**/*security*.md", "README.md", "docs/examples/**/*.properties", "docs/configuration/**/*.yml", 
+                    "examples/**/*config*.xml", "dotCMS/src/main/java/com/dotmarketing/util/ValidationUtils.java", "dotCMS/src/main/java/com/dotcms/util/ConversionUtils.py", 
+                    "dotCMS/src/main/java/**/*Validator*.java", "dotCMS/src/main/java/**/*Sanitizer*.java", "dotCMS/src/main/java/com/dotcms/rendering/velocity/util/XSS*.java", 
+                    "dotCMS/src/main/java/**/*XSS*.java", "dotCMS/src/main/java/com/dotmarketing/util/SecurityLogger.java", "config/user/logging/log4j2.xml", "dotCMS/WEB-INF/classes/log4j2.xml", 
+                    "**/log4j2*.xml", "dotCMS/src/main/java/com/dotcms/audit/**/*.java", "dotCMS/src/main/java/com/dotmarketing/business/AuditableAPI.java", "yarn.lock", "package-lock.json", "**/package.json"
+                  ],
+                  "exclude": [
+                    "**/target/**", "**/build/**", "**/node_modules/**", "**/dist/**", "**/*.min.js", "**/src/test/**", "**/src/integration-test/**", "**/.git/**", "**/.gradle/**", "**/docs/**"
+                  ]
+                },
+                {
+                  "type": "doc",
+                  "git_repo": "https://github.com/dotCMS/core.git",
+                  "ref": "main",
+                  "include": ["README.md", "LICENSE", "CHANGELOG.md", "SECURITY.md"]
                 }
               ],
               "sbom_info": {
                 "_type": "file",
-                # Path relative to the tool's data directory inside the container
                 "file_path": "data/sboms/docker.io/dotcms/dotcms/dotcms.sbom"
               },
-              "dependency_files": ["**/pom.xml", "package.json"],
+              "dependency_files": ["**/pom.xml", "**/package.json", "yarn.lock", "package-lock.json"],
               "build_system": "maven"
             },
             "scan": { "vulns": cves }
           }
 
-          # Ensure input directory exists and write input.json
           os.makedirs("${{ env.INPUT_DIR }}", exist_ok=True)
-          input_file_path = os.path.join("${{ env.INPUT_DIR }}", "input.json")
-          with open(input_file_path, 'w') as f:
+          with open(os.path.join("${{ env.INPUT_DIR }}", "input.json"), 'w') as f:
               json.dump(config, f, indent=2)
-          print(f"Successfully generated {input_file_path} with {len(cves)} CVEs.")
 
-      # --- 4. Start Services and Execute NVIDIA AI Analysis ---
-      - name: Run NVIDIA Analysis
+      - name: Start Services and Execute NVIDIA AI Analysis
         working-directory: ${{ env.TOOL_DIR }}
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
@@ -95,33 +122,15 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
           SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
         run: |
-          # 1. Login to NVIDIA Container Registry
-          echo "Logging into NVIDIA NGC..."
           echo "$NVIDIA_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
-          
-          # 2. Start all blueprint services in background
-          echo "Bringing up Docker Compose stack..."
           docker compose up -d
-          
-          # 3. Brief wait for containers to initialize
-          echo "Waiting for services to settle..."
           sleep 15
-          
-          # 4. Execute the agentic analysis inside the vuln-analysis container
-          # We use the corrected flag structure: --config_file and --input_file
-          # -T flag is used to run in non-interactive mode for CI/CD
-          echo "Executing nat run agent..."
           docker compose exec -T vuln-analysis nat run \
             --config_file=configs/config.yml \
             --input_file=data/input_messages/input.json
-            
-          # 5. Optional: Clean up to release GPU memory (comment out if you want containers to stay up)
-          # docker compose down
 
-      # --- 5. Upload Analysis Output ---
-      - name: Upload Analysis Report
+      - name: Upload Results
         uses: actions/upload-artifact@v4
         with:
-          name: dotcms-ai-vulnerability-analysis
-          # Path to where the tool writes final summaries
+          name: dotcms-ai-analysis
           path: ${{ env.TOOL_DIR }}/output/

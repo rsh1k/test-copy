@@ -1,0 +1,100 @@
+name: Local Self-Hosted Vulnerability Analysis
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  analyze-locally:
+    runs-on: self-hosted 
+
+    env:
+      # Absolute paths on your local machine
+      SBOM_DIR: "/home/rashik/vulnerability-analysis/data/sboms/docker.io/dotcms/dotcms"
+      INPUT_DIR: "/home/rashik/vulnerability-analysis/data/input_messages"
+      TOOL_DIR: "/home/rashik/vulnerability-analysis"
+
+    steps:
+      - name: Checkout dotCMS Code
+        uses: actions/checkout@v4
+        with:
+          path: dotcms-repo 
+
+      - name: Generate Syft SBOM
+        run: |
+          mkdir -p "${{ env.SBOM_DIR }}"
+          syft fs ./dotcms-repo -o syft-table > "${{ env.SBOM_DIR }}/dotcms:latest.sbom"
+
+      - name: Run Trivy Scan
+        run: |
+          trivy fs ./dotcms-repo --format json --severity CRITICAL,HIGH --output cve-report.json
+
+      - name: Update input.json
+        shell: python
+        run: |
+          import json
+          import os
+
+          # Extract CVEs from Trivy
+          with open('cve-report.json') as f:
+              report = json.load(f)
+          
+          cves = []
+          for res in report.get('Results', []):
+              for v in res.get('Vulnerabilities', []):
+                  cves.append({"vuln_id": v['VulnerabilityID']})
+
+          # Construct the JSON structure
+          config = {
+            "image": {
+              "name": "docker.io/dotcms/dotcms",
+              "tag": "latest",
+              "source_info": [
+                {
+                  "type": "code",
+                  "git_repo": "https://github.com/dotCMS/core.git",
+                  "ref": "main",
+                  "include": ["**/*"],
+                  "exclude": ["**/target/**"]
+                }
+              ],
+              "sbom_info": {
+                "_type": "file",
+                "file_path": "data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom"
+              },
+              "dependency_files": ["**/pom.xml", "package.json"],
+              "build_system": "maven"
+            },
+            "scan": { "vulns": cves }
+          }
+
+          # Save as input.json in the specified path
+          input_file_path = os.path.join("${{ env.INPUT_DIR }}", "input.json")
+          with open(input_file_path, 'w') as f:
+              json.dump(config, f, indent=2)
+
+      - name: Run NVIDIA Analysis
+        working-directory: ${{ env.TOOL_DIR }}
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          GHSA_API_KEY: ${{ secrets.GHSA_API_KEY }}
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          # 1. Login
+          echo "$NVIDIA_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
+          
+          # 2. Run Tool
+          # We point to data/input_messages/input.json because the tool
+          # maps the local 'data' folder to its internal container path.
+          docker compose run --rm \
+            -e NVIDIA_API_KEY=$NVIDIA_API_KEY \
+            -e GHSA_API_KEY=$GHSA_API_KEY \
+            -e NVD_API_KEY=$NVD_API_KEY \
+            vuln-analysis nat run --config data/input_messages/input.json
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotcms-vulnerability-report
+          path: ${{ env.TOOL_DIR }}/output/

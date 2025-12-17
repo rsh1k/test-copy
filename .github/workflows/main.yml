@@ -10,6 +10,7 @@ jobs:
     runs-on: self-hosted 
 
     env:
+      # Simple, clean paths
       SBOM_DIR: "/home/rashik/vulnerability-analysis/data/sboms/docker.io/dotcms/dotcms"
       INPUT_DIR: "/home/rashik/vulnerability-analysis/data/input_messages"
       TOOL_DIR: "/home/rashik/vulnerability-analysis"
@@ -20,28 +21,29 @@ jobs:
         with:
           path: dotcms-repo 
 
+      # --- 1. Generate Table SBOM (Simplified Filename) ---
       - name: Generate Syft SBOM
         run: |
-                # 1. Create the directory (ensure quotes here too)
-                mkdir -p "${{ env.SBOM_DIR }}"
-                
-                # 2. Run syft with quotes around the redirect target
-                echo "Scanning ./dotcms-repo..."
-                syft fs ./dotcms-repo -o syft-table > "${{ env.SBOM_DIR }}/dotcms:latest.sbom"
-                
-                # 3. Verify the file was created
-                ls -lh "${{ env.SBOM_DIR }}/dotcms:latest.sbom"
+          mkdir -p "${{ env.SBOM_DIR }}"
+          echo "Scanning code with Syft..."
+          # Changed dotcms:latest.sbom -> dotcms.sbom to fix the "received 2 args" error
+          syft fs ./dotcms-repo -o syft-table > "${{ env.SBOM_DIR }}/dotcms.sbom"
+          echo "SBOM saved successfully."
 
+      # --- 2. Generate Trivy CVE Report ---
       - name: Run Trivy Scan
         run: |
+          echo "Scanning for High/Critical vulnerabilities..."
           trivy fs ./dotcms-repo --format json --severity CRITICAL,HIGH --output cve-report.json
 
+      # --- 3. Update input.json (Matches the new SBOM name) ---
       - name: Update input.json
         shell: python
         run: |
           import json
           import os
 
+          # Read Trivy results
           with open('cve-report.json') as f:
               report = json.load(f)
           
@@ -50,6 +52,7 @@ jobs:
               for v in res.get('Vulnerabilities', []):
                   cves.append({"vuln_id": v['VulnerabilityID']})
 
+          # Construct configuration
           config = {
             "image": {
               "name": "docker.io/dotcms/dotcms",
@@ -65,7 +68,8 @@ jobs:
               ],
               "sbom_info": {
                 "_type": "file",
-                "file_path": "data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom"
+                # This must match the filename used in the Syft step above
+                "file_path": "data/sboms/docker.io/dotcms/dotcms/dotcms.sbom"
               },
               "dependency_files": ["**/pom.xml", "package.json"],
               "build_system": "maven"
@@ -76,19 +80,21 @@ jobs:
           input_file_path = os.path.join("${{ env.INPUT_DIR }}", "input.json")
           with open(input_file_path, 'w') as f:
               json.dump(config, f, indent=2)
+          print(f"Updated {input_file_path} with {len(cves)} CVEs.")
 
+      # --- 4. Run NVIDIA Analysis Tool ---
       - name: Run NVIDIA Analysis
         working-directory: ${{ env.TOOL_DIR }}
         env:
-          # Injected from GitHub Secrets
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           GHSA_API_KEY: ${{ secrets.GHSA_API_KEY }}
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
           SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
         run: |
+          # Registry login
           echo "$NVIDIA_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
           
-          # Pass all keys into the container
+          # Execute the blueprint tool
           docker compose run --rm \
             -e NVIDIA_API_KEY=$NVIDIA_API_KEY \
             -e GHSA_API_KEY=$GHSA_API_KEY \

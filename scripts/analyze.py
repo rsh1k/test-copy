@@ -6,7 +6,7 @@ from markdown_pdf import MarkdownPdf, Section
 
 def run_analysis():
     # Model ID for Claude 4.5
-    MODEL_NAME = "claude-4-5-sonnet-20250227"
+    MODEL_NAME = "claude-sonnet-4-5"
     
     # Load Trivy Results
     trivy_file = 'trivy-results.json'

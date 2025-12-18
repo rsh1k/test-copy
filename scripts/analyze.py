@@ -43,7 +43,7 @@ def run_analysis():
             system="You are a Senior DevSecOps Engineer specializing in dotCMS security.",
             messages=[{
                 "role": "user", 
-                "content": f"Analyze these dotCMS vulnerabilities. Provide a table with: CVE ID, Severity, Package, Status (True Positive/False Positive), and a Recommended Mitigation. Data: {json.dumps(vulnerabilities[:20])}"
+                "content": f"Analyze these dotCMS vulnerabilities. Check the dotCMS source code in the repo and find if there are any mitigating or compensating controls available for the CVEs. Provide a table with: CVE ID, Severity, Package, Status (True Positive/False Positive/Compensating Control Available, etc), and a Recommended Mitigation. Data: {json.dumps(vulnerabilities[:20])}"
             }]
         )
         report_text = response.content[0].text

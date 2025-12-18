@@ -5,39 +5,27 @@ from anthropic import Anthropic
 from fpdf import FPDF
 
 def clean_for_pdf(text):
-    """Replaces characters that common PDF fonts can't handle to prevent crashes."""
+    """Replaces characters that common PDF fonts can't handle."""
     replacements = {
-        '\u2013': '-', # en dash
-        '\u2014': '-', # em dash
-        '\u2019': "'", # smart quote
-        '\u2018': "'", # smart quote
-        '\u201d': '"', # smart quote
-        '\u201c': '"', # smart quote
-        '\u2022': '*', # bullet point
+        '\u2013': '-', '\u2014': '-', '\u2019': "'", 
+        '\u2018': "'", '\u201d': '"', '\u201c': '"', '\u2022': '*'
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
-    # Ensure text is compatible with Latin-1 encoding used by FPDF
     return text.encode('latin-1', 'replace').decode('latin-1')
 
 def run_analysis():
     print("Starting AI Analysis...")
     
-    # 1. Verify and Load Trivy Results
+    # 1. Load Trivy Data
     if not os.path.exists('trivy-results.json'):
-        print("Error: trivy-results.json not found in the root directory.")
+        print("Error: trivy-results.json not found.")
         sys.exit(1)
 
     with open('trivy-results.json') as f:
         trivy_data = json.load(f)
 
-    # 2. Load pom.xml context to help Claude identify project structure
-    pom_context = "No pom.xml found."
-    if os.path.exists('pom.xml'):
-        with open('pom.xml', 'r') as f:
-            pom_context = f.read()[:5000] # First 5k chars
-
-    # 3. Filter for High/Critical Vulnerabilities
+    # 2. Extract Vulnerabilities
     vulnerabilities = []
     for result in trivy_data.get('Results', []):
         for vuln in result.get('Vulnerabilities', []):
@@ -45,71 +33,42 @@ def run_analysis():
                 "id": vuln.get('VulnerabilityID'),
                 "pkg": vuln.get('PkgName'),
                 "severity": vuln.get('Severity'),
-                "desc": vuln.get('Description', 'No description available')[:250]
+                "desc": vuln.get('Description', '')[:200]
             })
 
     if not vulnerabilities:
-        print("No High or Critical vulnerabilities found.")
-        # Create dummy PDF so upload step doesn't fail
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Helvetica", size=12)
-        pdf.cell(0, 10, "No High/Critical vulnerabilities found in latest scan.", ln=True)
-        pdf.output("security_analysis_report.pdf")
+        print("No vulnerabilities found.")
         return
 
-    # 4. Initialize Claude and send prompt
+    # 3. Call Claude with the 'latest' alias
     api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("Error: ANTHROPIC_API_KEY environment variable is missing.")
-        sys.exit(1)
-
     client = Anthropic(api_key=api_key)
     
-    prompt = f"""
-    You are a Senior Security Engineer. Analyze these dotCMS vulnerabilities.
-    
-    CONTEXT:
-    Project pom.xml Snippet: {pom_context}
-    
-    SCAN DATA:
-    {json.dumps(vulnerabilities[:15], indent=2)}
+    # WE ARE USING THE 'LATEST' ALIAS HERE TO PREVENT 404 ERRORS
+    selected_model = "claude-3-5-sonnet-latest"
+    print(f"Requesting analysis using model: {selected_model}")
 
-    TASK:
-    1. Create a SUMMARY TABLE with columns: CVE ID, Package, Status (True Positive/False Positive/Mitigated), and Mitigating Control.
-    2. Analyze if dotCMS (using Apache Shiro, Java security filters, and specific dependency shading) likely mitigates these.
-    3. Provide a detailed justification for each entry after the table.
-    """
-
-    print("Requesting analysis from Claude (claude-3-5-sonnet-latest)...")
     try:
         response = client.messages.create(
-            model="claude-3-5-sonnet-latest", # Use the 'latest' alias
+            model=selected_model,
             max_tokens=4000,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{
+                "role": "user", 
+                "content": f"Analyze these dotCMS vulnerabilities and provide a summary table with status (TP/FP/Mitigated) and controls: {json.dumps(vulnerabilities[:15])}"
+            }]
         )
         raw_content = response.content[0].text
     except Exception as e:
-        print(f"Failed to communicate with Claude API: {e}")
+        print(f"API Error: {e}")
         sys.exit(1)
 
-    # 5. Clean text and generate the PDF
-    safe_content = clean_for_pdf(raw_content)
-
+    # 4. Generate PDF
     pdf = FPDF()
     pdf.add_page()
-    
-    # Title
-    pdf.set_font("Helvetica", 'B', 16)
-    pdf.cell(0, 10, "dotCMS AI Vulnerability Analysis Report", ln=True, align='C')
-    pdf.ln(5)
-    
-    # Body Content
     pdf.set_font("Helvetica", size=10)
-    pdf.multi_cell(0, 7, safe_content)
-    
+    pdf.multi_cell(0, 7, clean_for_pdf(raw_content))
     pdf.output("security_analysis_report.pdf")
-    print("Success: 'security_analysis_report.pdf' generated.")
+    print("Report generated successfully.")
 
 if __name__ == "__main__":
     run_analysis()

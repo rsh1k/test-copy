@@ -163,14 +163,17 @@ jobs:
           with open(summary_file, "w") as f:
               f.write(markdown)
 
-      # --- REPLACED GIT PUSH LOGIC ---
+      # --- RE-ENGINEERED CHECKOUT FOR TARGET REPO ---
       - name: Checkout Target Repository
         uses: actions/checkout@v4
         with:
           repository: rsh1k/test-copy
+          # CRITICAL: The token MUST be passed here for the action to use it
           token: ${{ secrets.PAT_TOKEN }}
           path: target-repo
           ref: master
+          # Ensures the runner doesn't get confused with existing local credentials
+          persist-credentials: true
 
       - name: Update Reports and Push
         run: |
@@ -180,7 +183,7 @@ jobs:
           rm -rf reports/*
           cp -r ${{ env.OUTPUT_DIR }}/* reports/
           
-          # Git Config (Local to this repo)
+          # Git Config
           git config user.name "Vulnerability Bot"
           git config user.email "bot@github.com"
           
@@ -190,5 +193,6 @@ jobs:
             echo "No changes found."
           else
             git commit -m "Security Scan Update: $(date +'%Y-%m-%d %H:%M')"
+            # Since checkout action handled auth, we just push normally
             git push origin master
           fi

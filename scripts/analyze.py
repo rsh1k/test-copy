@@ -1,76 +1,120 @@
 import json
 import os
+import sys
 from anthropic import Anthropic
 from fpdf import FPDF
 
-def run_analysis():
-    # 1. Load Trivy Results
-    try:
-        with open('trivy-results.json') as f:
-            trivy_data = json.load(f)
-    except FileNotFoundError:
-        print("Trivy results not found.")
-        return
+def clean_for_pdf(text):
+    """Replaces characters that common PDF fonts can't handle to prevent crashes."""
+    replacements = {
+        '\u2013': '-', # en dash
+        '\u2014': '-', # em dash
+        '\u2019': "'", # smart quote
+        '\u2018': "'", # smart quote
+        '\u201d': '"', # smart quote
+        '\u201c': '"', # smart quote
+        '\u2022': '*', # bullet point
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    # Ensure text is compatible with Latin-1 encoding used by FPDF
+    return text.encode('latin-1', 'replace').decode('latin-1')
 
-    # 2. Load pom.xml for Context (Helping AI see project dependencies)
-    pom_content = "Not available"
+def run_analysis():
+    print("Starting AI Analysis...")
+    
+    # 1. Verify and Load Trivy Results
+    if not os.path.exists('trivy-results.json'):
+        print("Error: trivy-results.json not found in the root directory.")
+        sys.exit(1)
+
+    with open('trivy-results.json') as f:
+        trivy_data = json.load(f)
+
+    # 2. Load pom.xml context to help Claude identify project structure
+    pom_context = "No pom.xml found."
     if os.path.exists('pom.xml'):
         with open('pom.xml', 'r') as f:
-            pom_content = f.read()[:5000] # Limit to first 5k chars for token efficiency
+            pom_context = f.read()[:5000] # Provide first 5k characters for context
 
-    # 3. Extract top vulnerabilities
-    vulns = []
-    results = trivy_data.get('Results', [])
-    for res in results:
-        for v in res.get('Vulnerabilities', []):
-            vulns.append({
-                "id": v.get('VulnerabilityID'),
-                "package": v.get('PkgName'),
-                "severity": v.get('Severity'),
-                "description": v.get('Description', 'No description')[:300]
+    # 3. Filter for High/Critical Vulnerabilities
+    vulnerabilities = []
+    for result in trivy_data.get('Results', []):
+        for vuln in result.get('Vulnerabilities', []):
+            vulnerabilities.append({
+                "id": vuln.get('VulnerabilityID'),
+                "pkg": vuln.get('PkgName'),
+                "severity": vuln.get('Severity'),
+                "desc": vuln.get('Description', 'No description available')[:250]
             })
 
-    # 4. Prepare Claude Prompt
-    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    if not vulnerabilities:
+        print("No High or Critical vulnerabilities found to analyze.")
+        # Create a basic PDF so the workflow doesn't fail on artifact upload
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Helvetica", size=12)
+        pdf.cell(0, 10, "No High/Critical vulnerabilities found in latest scan.", ln=True)
+        pdf.output("security_analysis_report.pdf")
+        return
+
+    # 4. Initialize Claude and send prompt
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("Error: ANTHROPIC_API_KEY environment variable is missing.")
+        sys.exit(1)
+
+    client = Anthropic(api_key=api_key)
     
     prompt = f"""
-    You are a Senior Security Engineer. I have a Trivy scan for the dotCMS docker image.
+    You are a Senior Security Engineer performing a differential analysis on dotCMS vulnerabilities.
     
-    VULNERABILITIES FOUND:
-    {json.dumps(vulns[:15], indent=2)}
-
-    PROJECT CONTEXT (pom.xml snippet):
-    {pom_content}
+    CONTEXT:
+    Project pom.xml Snippet: {pom_context}
+    
+    SCAN DATA:
+    {json.dumps(vulnerabilities[:15], indent=2)}
 
     TASK:
-    1. Analyze if these CVEs are likely True Positives or False Positives in a dotCMS environment.
-    2. Check if dotCMS's security architecture (Apache Shiro, Java filters) provides mitigating controls.
-    3. Output a SUMMARY TABLE at the top with columns: CVE ID, Vulnerability, Status, Mitigating Control.
-    4. Provide detailed reasoning for each entry.
+    1. Create a SUMMARY TABLE with columns: CVE ID, Package, Status (True Positive/False Positive/Mitigated), and Mitigating Control.
+    2. Analyze if dotCMS (using Apache Shiro, Java security filters, and specific dependency shading) provides mitigating controls for these CVEs.
+    3. Provide a detailed justification for each entry after the table.
     """
 
-    print("Sending data to Claude...")
-    message = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
-        max_tokens=4000,
-        messages=[{"role": "user", "content": prompt}]
-    )
+    print("Requesting analysis from Claude (claude-3-5-sonnet-latest)...")
+    try:
+        response = client.messages.create(
+            model="claude-3-5-sonnet-latest",
+            max_tokens=4000,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw_content = response.content[0].text
+    except Exception as e:
+        print(f"Failed to communicate with Claude API: {e}")
+        sys.exit(1)
 
-    full_text = message.content[0].text
+    # 5. Clean text and generate the PDF
+    safe_content = clean_for_pdf(raw_content)
 
-    # 5. Generate PDF
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "DotCMS AI Vulnerability Analysis", ln=True, align='C')
+    
+    # Title
+    pdf.set_font("Helvetica", 'B', 16)
+    pdf.cell(0, 10, "dotCMS AI Vulnerability Analysis Report", ln=True, align='C')
+    pdf.ln(5)
+    
+    # Metadata
+    pdf.set_font("Helvetica", 'I', 10)
+    pdf.cell(0, 10, "Generated by Claude 3.5 Sonnet via GitHub Actions", ln=True, align='C')
     pdf.ln(10)
     
-    pdf.set_font("Arial", size=10)
-    # Using multi_cell to handle the table and text wrapping
-    pdf.multi_cell(0, 8, full_text)
+    # Body Content
+    pdf.set_font("Helvetica", size=10)
+    pdf.multi_cell(0, 7, safe_content)
     
     pdf.output("security_analysis_report.pdf")
-    print("Report generated: security_analysis_report.pdf")
+    print("Success: 'security_analysis_report.pdf' has been generated.")
 
 if __name__ == "__main__":
     run_analysis()

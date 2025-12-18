@@ -16,20 +16,20 @@ jobs:
       OUTPUT_DIR: "/home/rashik/vulnerability-analysis/output"
 
     steps:
-      - name: Checkout dotCMS Repository
+      - name: Checkout Current Repository
         uses: actions/checkout@v4
         with:
-          path: dotcms-repo 
+          path: main-repo
 
       - name: Cleanup Old Data
         run: |
-          echo "Cleaning up previous run data..."
+          echo "Cleaning up previous run data from self-hosted runner..."
           rm -rf "${{ env.SBOM_DIR }}"/*
           rm -rf "${{ env.INPUT_DIR }}"/*
           mkdir -p "${{ env.OUTPUT_DIR }}"
           rm -rf "${{ env.OUTPUT_DIR }}"/*
           rm -f cve-report.json
-          rm -rf target-repo
+          rm -rf test-copy-repo
 
       - name: Generate Syft SBOM
         run: |
@@ -91,7 +91,7 @@ jobs:
                     "dotCMS/src/main/java/com/dotcms/util/EncryptionUtil.java", "**/src/main/java/**/*Encrypt*.java", "**/src/main/java/**/*Cipher*.java", "dotCMS/src/main/java/com/dotcms/graphql/**/*.java", 
                     "core-web/src/main/java/com/dotcms/graphql/**/*.java", "**/graphql/**/*.java", "docker/Dockerfile", "docker/*/Dockerfile", "docker-compose.yml", "docker/docker-compose*.yml", 
                     "environments/*/Dockerfile", "docker/*.env", "docker/*/config/**", "environments/*/.env", ".env.example", "owasp-suppressions.xml", ".github/workflows/*.yml", 
-                    "cicd/**/*.yml", "cicd/**/*.sh", ".github/dependabot.yml", "renovate.json", ".snyk", "dotCMS/src/test/java/**/*Security*.java", "dotCMS/src/test/java/**/*Permission*.java", 
+                    "cicd/**/*.yml", "cicd/**/*.sh", ".github/dependabot.yml", "renovate.json", ".snyk", "dotCMS/src/test/java/**/*Security*.java", "dotCMS/src/test/java/**/*Security*.java", "dotCMS/src/test/java/**/*Permission*.java", 
                     "dotcms-integration/src/test/java/**/*Security*.java", "dotcms-integration/src/test/java/**/*Auth*.java", "**/src/test/java/**/*FileUpload*.java", "**/src/test/java/**/*Upload*.java", 
                     "**/src/test/java/**/*File*Test.java", "SECURITY.md", "docs/security/**/*.md", "docs/**/*security*.md", "README.md", "docs/examples/**/*.properties", "docs/configuration/**/*.yml", 
                     "examples/**/*config*.xml", "dotCMS/src/main/java/com/dotmarketing/util/ValidationUtils.java", "dotCMS/src/main/java/com/dotcms/util/ConversionUtils.py", 
@@ -139,60 +139,39 @@ jobs:
             --config_file=configs/config.yml \
             --input_file=data/input_messages/input.json
 
-      - name: Generate Summary Table for GitHub
+      - name: Generate Summary Table
         shell: python
         run: |
           import os
           import json
+          out = "${{ env.OUTPUT_DIR }}"
+          md = "# Vulnerability Analysis Summary\n\n| CVE | Severity | Status | Link |\n|---|---|---|---|\n"
+          files = [f for f in os.listdir(out) if f.endswith(('.json', '.md')) and f not in ["README.md", "input.json"]]
+          for f in sorted(files):
+              md += f"| {f.split('.')[0]} | Critical/High | Analyzed | [View](./{f}) |\n"
+          with open(os.path.join(out, "README.md"), "w") as f:
+              f.write(md)
 
-          output_dir = "${{ env.OUTPUT_DIR }}"
-          summary_file = os.path.join(output_dir, "README.md")
-          
-          markdown = "# Vulnerability Analysis Report\n\n"
-          markdown += "| CVE ID | Severity | AI Finding | Detailed Report |\n"
-          markdown += "| :--- | :--- | :--- | :--- |\n"
-
-          files = [f for f in os.listdir(output_dir) if f.endswith(('.json', '.md')) and f not in ["README.md", "input.json"]]
-          
-          for file in sorted(files):
-              cve_id = file.split('.')[0]
-              severity = "CRITICAL/HIGH"
-              status = "Analyzed"
-              markdown += f"| **{cve_id}** | {severity} | {status} | [View Details](./{file}) |\n"
-
-          with open(summary_file, "w") as f:
-              f.write(markdown)
-
-      # --- RE-ENGINEERED CHECKOUT FOR TARGET REPO ---
-      - name: Checkout Target Repository
+      - name: Checkout target repository
         uses: actions/checkout@v4
         with:
           repository: rsh1k/test-copy
-          # CRITICAL: The token MUST be passed here for the action to use it
           token: ${{ secrets.PAT_TOKEN }}
-          path: target-repo
-          ref: master
-          # Ensures the runner doesn't get confused with existing local credentials
-          persist-credentials: true
+          path: test-copy-repo
 
-      - name: Update Reports and Push
+      - name: Commit and push results
         run: |
-          cd target-repo
-          # Clear old reports and copy new ones
+          # 1. Setup local config for this repo
+          cd test-copy-repo
+          git config user.email "action@github.com"
+          git config user.name "Github Actions"
+          
+          # 2. Sync files
           mkdir -p reports
           rm -rf reports/*
           cp -r ${{ env.OUTPUT_DIR }}/* reports/
           
-          # Git Config
-          git config user.name "Vulnerability Bot"
-          git config user.email "bot@github.com"
-          
-          # Add, Commit, and Push
+          # 3. Add and Push using the token from checkout
           git add reports/
-          if git diff --staged --quiet; then
-            echo "No changes found."
-          else
-            git commit -m "Security Scan Update: $(date +'%Y-%m-%d %H:%M')"
-            # Since checkout action handled auth, we just push normally
-            git push origin master
-          fi
+          git commit -m "Update Vulnerability Reports $(date)" || echo "No changes"
+          git push origin master

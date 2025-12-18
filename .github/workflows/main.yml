@@ -24,11 +24,14 @@ jobs:
       - name: Cleanup Old Data
         run: |
           echo "Cleaning up previous run data from self-hosted runner..."
+          # Delete existing local files to ensure a fresh output
           rm -rf "${{ env.SBOM_DIR }}"/*
           rm -rf "${{ env.INPUT_DIR }}"/*
           mkdir -p "${{ env.OUTPUT_DIR }}"
           rm -rf "${{ env.OUTPUT_DIR }}"/*
           rm -f cve-report.json
+          # Remove previous clone of the target repo if it exists
+          rm -rf target-repo
 
       - name: Generate Syft SBOM
         run: |
@@ -149,30 +152,30 @@ jobs:
           summary_file = os.path.join(output_dir, "README.md")
           
           markdown = "# Vulnerability Analysis Report\n\n"
-          markdown += "| CVE ID | Severity | AI Finding (Status) | Detailed Report |\n"
+          markdown += "Click on a CVE ID to see the detailed AI analysis report.\n\n"
+          markdown += "| CVE ID | Severity | AI Finding | Detailed Report |\n"
           markdown += "| :--- | :--- | :--- | :--- |\n"
 
-          # Scan for output files (assuming your tool produces .json or .md per CVE)
-          files = [f for f in os.listdir(output_dir) if f.endswith(('.json', '.md')) and f != "README.md"]
+          # Get all json/md files except README and input.json
+          files = [f for f in os.listdir(output_dir) if f.endswith(('.json', '.md')) and f not in ["README.md", "input.json"]]
           
           for file in sorted(files):
-              # Default values if parsing fails
               cve_id = file.split('.')[0]
-              severity = "Unknown"
-              finding = "Analyzed"
-              
-              # Optional: Try to extract actual status from JSON if available
+              severity = "CRITICAL/HIGH" # Default based on your Trivy filter
+              status = "Pending AI Review"
+
+              # Try to parse status from the output file if it's JSON
               if file.endswith('.json'):
                   try:
                       with open(os.path.join(output_dir, file), 'r') as f:
                           data = json.load(f)
-                          # Adjust these keys to match your tool's actual JSON output structure
+                          # Using generic keys - update these to match your tool's output format
                           severity = data.get("severity", severity)
-                          finding = data.get("finding", "TP/FP Check Details")
+                          status = data.get("finding", "Analyzed")
                   except:
                       pass
 
-              markdown += f"| **{cve_id}** | {severity} | {finding} | [View Details](./{file}) |\n"
+              markdown += f"| **{cve_id}** | {severity} | {status} | [View Details](./{file}) |\n"
 
           with open(summary_file, "w") as f:
               f.write(markdown)
@@ -181,19 +184,26 @@ jobs:
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
+          # Configure Git
           git config --global user.name "Vulnerability Analysis Bot"
           git config --global user.email "bot@github.com"
           
-          # Clone target repo
+          # Clean clone of the destination repo using PAT for authentication
+          rm -rf target-repo
           git clone https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/rsh1k/test-copy.git target-repo
           
-          # Sync reports folder
+          # Sync files: Remove old reports, copy new ones
           mkdir -p target-repo/reports
           rm -rf target-repo/reports/*
           cp -r ${{ env.OUTPUT_DIR }}/* target-repo/reports/
           
+          # Commit and Push
           cd target-repo
           git add reports/
-          # Only commit if changes exist
-          git diff-index --quiet HEAD || git commit -m "Update reports: $(date +'%Y-%m-%d %H:%M')"
-          git push origin master
+          
+          if git diff --staged --quiet; then
+            echo "No new changes to commit."
+          else
+            git commit -m "Automated Security Update: $(date +'%Y-%m-%d %H:%M')"
+            git push origin master
+          fi

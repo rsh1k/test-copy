@@ -149,7 +149,7 @@ jobs:
           summary_file = os.path.join(output_dir, "README.md")
           
           markdown = "# Vulnerability Analysis Report\n\n"
-          markdown += "| CVE ID | Severity | AI Status | Report Link |\n"
+          markdown += "| CVE ID | Severity | AI Finding | Detailed Report |\n"
           markdown += "| :--- | :--- | :--- | :--- |\n"
 
           files = [f for f in os.listdir(output_dir) if f.endswith(('.json', '.md')) and f not in ["README.md", "input.json"]]
@@ -157,48 +157,38 @@ jobs:
           for file in sorted(files):
               cve_id = file.split('.')[0]
               severity = "CRITICAL/HIGH"
-              status = "Completed"
-              
-              if file.endswith('.json'):
-                  try:
-                      with open(os.path.join(output_dir, file), 'r') as f:
-                          data = json.load(f)
-                          severity = data.get("severity", severity)
-                          status = data.get("finding", "Analyzed")
-                  except: pass
-
+              status = "Analyzed"
               markdown += f"| **{cve_id}** | {severity} | {status} | [View Details](./{file}) |\n"
 
           with open(summary_file, "w") as f:
               f.write(markdown)
 
-      - name: Push Reports to External Repository
-        env:
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      # --- REPLACED GIT PUSH LOGIC ---
+      - name: Checkout Target Repository
+        uses: actions/checkout@v4
+        with:
+          repository: rsh1k/test-copy
+          token: ${{ secrets.PAT_TOKEN }}
+          path: target-repo
+          ref: master
+
+      - name: Update Reports and Push
         run: |
-          # 1. Force Git to NOT use any credential helper from the self-hosted runner
-          git config --global --unset-all credential.helper || true
-          
-          # 2. Cleanup local repo folder and clone fresh with the token
-          rm -rf target-repo
-          git clone "https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/rsh1k/test-copy.git" target-repo
-          
-          # 3. Setup user identity for this folder
           cd target-repo
-          git config user.name "Vulnerability Bot"
-          git config user.email "bot@github.com"
-          
-          # 4. Clear and Copy
+          # Clear old reports and copy new ones
           mkdir -p reports
           rm -rf reports/*
           cp -r ${{ env.OUTPUT_DIR }}/* reports/
           
-          # 5. Commit and Push using the token URL again to be safe
+          # Git Config (Local to this repo)
+          git config user.name "Vulnerability Bot"
+          git config user.email "bot@github.com"
+          
+          # Add, Commit, and Push
           git add reports/
           if git diff --staged --quiet; then
             echo "No changes found."
           else
-            git commit -m "Security Scan: $(date +'%Y-%m-%d %H:%M')"
-            # Force push using the URL that includes the token
-            git push "https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/rsh1k/test-copy.git" master
+            git commit -m "Security Scan Update: $(date +'%Y-%m-%d %H:%M')"
+            git push origin master
           fi

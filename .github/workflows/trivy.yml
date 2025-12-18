@@ -1,4 +1,4 @@
-name: dotCMS Security Scan and AI Analysis
+name: dotCMS AI Security Workflow
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  scan_and_analyze:
+  analyze:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -18,26 +18,24 @@ jobs:
           python-version: '3.10'
 
       - name: Install Dependencies
-        run: |
-          pip install anthropic fpdf2
+        run: pip install anthropic fpdf2
 
-      - name: Run Trivy Scan
-        # This step must generate the 'trivy-results.json' file
+      - name: Generate Scan Results
+        # Ensure this produces trivy-results.json
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'dotcms/dotcms:latest'
           format: 'json'
           output: 'trivy-results.json'
 
-      - name: Run Claude AI Analysis
+      - name: Run Claude 4.5 Analysis
         run: python scripts/analyze.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Upload Security Report
-        if: success()
+      - name: Archive Results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dotcms-security-report
+          name: security-analysis-report
           path: security_analysis_report.pdf
-          retention-days: 7

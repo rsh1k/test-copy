@@ -23,20 +23,17 @@ jobs:
 
       - name: Cleanup Old Data
         run: |
-          echo "Cleaning up previous run data from self-hosted runner..."
-          # Delete existing local files to ensure a fresh output
+          echo "Cleaning up previous run data..."
           rm -rf "${{ env.SBOM_DIR }}"/*
           rm -rf "${{ env.INPUT_DIR }}"/*
           mkdir -p "${{ env.OUTPUT_DIR }}"
           rm -rf "${{ env.OUTPUT_DIR }}"/*
           rm -f cve-report.json
-          # Remove previous clone of the target repo if it exists
           rm -rf target-repo
 
       - name: Generate Syft SBOM
         run: |
           mkdir -p "${{ env.SBOM_DIR }}"
-          echo "Scanning dotCMS Image with Syft..."
           syft docker.io/dotcms/dotcms:latest -o syft-table > "${{ env.SBOM_DIR }}/dotcms.sbom"
 
       - name: Run Trivy Scan
@@ -152,28 +149,23 @@ jobs:
           summary_file = os.path.join(output_dir, "README.md")
           
           markdown = "# Vulnerability Analysis Report\n\n"
-          markdown += "Click on a CVE ID to see the detailed AI analysis report.\n\n"
-          markdown += "| CVE ID | Severity | AI Finding | Detailed Report |\n"
+          markdown += "| CVE ID | Severity | AI Status | Report Link |\n"
           markdown += "| :--- | :--- | :--- | :--- |\n"
 
-          # Get all json/md files except README and input.json
           files = [f for f in os.listdir(output_dir) if f.endswith(('.json', '.md')) and f not in ["README.md", "input.json"]]
           
           for file in sorted(files):
               cve_id = file.split('.')[0]
-              severity = "CRITICAL/HIGH" # Default based on your Trivy filter
-              status = "Pending AI Review"
-
-              # Try to parse status from the output file if it's JSON
+              severity = "CRITICAL/HIGH"
+              status = "Completed"
+              
               if file.endswith('.json'):
                   try:
                       with open(os.path.join(output_dir, file), 'r') as f:
                           data = json.load(f)
-                          # Using generic keys - update these to match your tool's output format
                           severity = data.get("severity", severity)
                           status = data.get("finding", "Analyzed")
-                  except:
-                      pass
+                  except: pass
 
               markdown += f"| **{cve_id}** | {severity} | {status} | [View Details](./{file}) |\n"
 
@@ -184,26 +176,29 @@ jobs:
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
-          # Configure Git
-          git config --global user.name "Vulnerability Analysis Bot"
-          git config --global user.email "bot@github.com"
+          # 1. Force Git to NOT use any credential helper from the self-hosted runner
+          git config --global --unset-all credential.helper || true
           
-          # Clean clone of the destination repo using PAT for authentication
+          # 2. Cleanup local repo folder and clone fresh with the token
           rm -rf target-repo
-          git clone https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/rsh1k/test-copy.git target-repo
+          git clone "https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/rsh1k/test-copy.git" target-repo
           
-          # Sync files: Remove old reports, copy new ones
-          mkdir -p target-repo/reports
-          rm -rf target-repo/reports/*
-          cp -r ${{ env.OUTPUT_DIR }}/* target-repo/reports/
-          
-          # Commit and Push
+          # 3. Setup user identity for this folder
           cd target-repo
-          git add reports/
+          git config user.name "Vulnerability Bot"
+          git config user.email "bot@github.com"
           
+          # 4. Clear and Copy
+          mkdir -p reports
+          rm -rf reports/*
+          cp -r ${{ env.OUTPUT_DIR }}/* reports/
+          
+          # 5. Commit and Push using the token URL again to be safe
+          git add reports/
           if git diff --staged --quiet; then
-            echo "No new changes to commit."
+            echo "No changes found."
           else
-            git commit -m "Automated Security Update: $(date +'%Y-%m-%d %H:%M')"
-            git push origin master
+            git commit -m "Security Scan: $(date +'%Y-%m-%d %H:%M')"
+            # Force push using the URL that includes the token
+            git push "https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/rsh1k/test-copy.git" master
           fi

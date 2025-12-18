@@ -13,12 +13,22 @@ jobs:
       SBOM_DIR: "/home/rashik/vulnerability-analysis/data/sboms/docker.io/dotcms/dotcms"
       INPUT_DIR: "/home/rashik/vulnerability-analysis/data/input_messages"
       TOOL_DIR: "/home/rashik/vulnerability-analysis"
+      OUTPUT_DIR: "/home/rashik/vulnerability-analysis/output"
 
     steps:
       - name: Checkout dotCMS Repository
         uses: actions/checkout@v4
         with:
           path: dotcms-repo 
+
+      - name: Cleanup Old Data
+        run: |
+          echo "Cleaning up previous run data from self-hosted runner..."
+          rm -rf "${{ env.SBOM_DIR }}"/*
+          rm -rf "${{ env.INPUT_DIR }}"/*
+          mkdir -p "${{ env.OUTPUT_DIR }}"
+          rm -rf "${{ env.OUTPUT_DIR }}"/*
+          rm -f cve-report.json
 
       - name: Generate Syft SBOM
         run: |
@@ -30,7 +40,7 @@ jobs:
         run: |
           trivy image docker.io/dotcms/dotcms:latest --format json --severity CRITICAL,HIGH --output cve-report.json
 
-      - name: Update input.json with Specific File Filters
+      - name: Update input.json with Full File Filters
         shell: python
         run: |
           import json
@@ -129,8 +139,61 @@ jobs:
             --config_file=configs/config.yml \
             --input_file=data/input_messages/input.json
 
-      - name: Upload Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: dotcms-ai-analysis
-          path: ${{ env.TOOL_DIR }}/output/
+      - name: Generate Summary Table for GitHub
+        shell: python
+        run: |
+          import os
+          import json
+
+          output_dir = "${{ env.OUTPUT_DIR }}"
+          summary_file = os.path.join(output_dir, "README.md")
+          
+          markdown = "# Vulnerability Analysis Report\n\n"
+          markdown += "| CVE ID | Severity | AI Finding (Status) | Detailed Report |\n"
+          markdown += "| :--- | :--- | :--- | :--- |\n"
+
+          # Scan for output files (assuming your tool produces .json or .md per CVE)
+          files = [f for f in os.listdir(output_dir) if f.endswith(('.json', '.md')) and f != "README.md"]
+          
+          for file in sorted(files):
+              # Default values if parsing fails
+              cve_id = file.split('.')[0]
+              severity = "Unknown"
+              finding = "Analyzed"
+              
+              # Optional: Try to extract actual status from JSON if available
+              if file.endswith('.json'):
+                  try:
+                      with open(os.path.join(output_dir, file), 'r') as f:
+                          data = json.load(f)
+                          # Adjust these keys to match your tool's actual JSON output structure
+                          severity = data.get("severity", severity)
+                          finding = data.get("finding", "TP/FP Check Details")
+                  except:
+                      pass
+
+              markdown += f"| **{cve_id}** | {severity} | {finding} | [View Details](./{file}) |\n"
+
+          with open(summary_file, "w") as f:
+              f.write(markdown)
+
+      - name: Push Reports to External Repository
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          git config --global user.name "Vulnerability Analysis Bot"
+          git config --global user.email "bot@github.com"
+          
+          # Clone target repo
+          git clone https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/rsh1k/test-copy.git target-repo
+          
+          # Sync reports folder
+          mkdir -p target-repo/reports
+          rm -rf target-repo/reports/*
+          cp -r ${{ env.OUTPUT_DIR }}/* target-repo/reports/
+          
+          cd target-repo
+          git add reports/
+          # Only commit if changes exist
+          git diff-index --quiet HEAD || git commit -m "Update reports: $(date +'%Y-%m-%d %H:%M')"
+          git push origin master

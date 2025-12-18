@@ -1,4 +1,4 @@
-name: dotCMS Security Validation & Storage
+name: dotCMS Security Analysis (Claude 4.5)
 
 on:
   push:
@@ -6,13 +6,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # Crucial for pushing the report back to the repo
+  contents: write
 
 jobs:
-  security-audit:
+  validate_vulnerabilities:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -23,22 +23,20 @@ jobs:
       - name: Install Analysis Tools
         run: pip install anthropic markdown-pdf
 
-      - name: Run Trivy Vulnerability Scan
+      - name: Run Trivy Scan
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'dotcms/dotcms:latest'
           format: 'json'
           output: 'trivy-results.json'
 
-      - name: Execute AI Code Validation
+      - name: Generate Report via Claude 4.5
         run: python scripts/analyze.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      # Automatically commits the PDF to your repository
-      - name: Commit Report to Repo
+      - name: Commit Report to Repository
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Automated Security Audit: dotCMS Validation Report [skip ci]"
+          commit_message: "Updated dotCMS Validation Report (Claude 4.5) [skip ci]"
           file_pattern: 'security-reports/*.pdf'
-          branch: main

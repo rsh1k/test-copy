@@ -25,7 +25,7 @@ def run_analysis():
     with open('trivy-results.json') as f:
         trivy_data = json.load(f)
 
-    # 2. Extract Vulnerabilities
+    # 2. Extract Vulnerabilities (Limiting to 10 for Free Tier)
     vulnerabilities = []
     for result in trivy_data.get('Results', []):
         for vuln in result.get('Vulnerabilities', []):
@@ -33,41 +33,40 @@ def run_analysis():
                 "id": vuln.get('VulnerabilityID'),
                 "pkg": vuln.get('PkgName'),
                 "severity": vuln.get('Severity'),
-                "desc": vuln.get('Description', '')[:150] # Shortened for free tier context window
+                "desc": vuln.get('Description', '')[:150]
             })
 
     if not vulnerabilities:
         print("No vulnerabilities found.")
         return
 
-    # 3. Call Claude with Haiku (Available on Free Tier)
+    # 3. Call Claude with Haiku (Compatible with Free Tier)
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     client = Anthropic(api_key=api_key)
     
-    # Haiku is the standard model for the Anthropic Free/Evaluation Tier
+    # Haiku is the most reliable model for the Free/Evaluation Tier
     selected_model = "claude-3-haiku-20240307"
     print(f"Requesting analysis using model: {selected_model}")
 
     try:
         response = client.messages.create(
             model=selected_model,
-            max_tokens=2000, # Reduced for free tier limits
+            max_tokens=2000,
             messages=[{
                 "role": "user", 
-                "content": f"Create a summary table for these CVEs with status (TP/FP/Mitigated) and controls for dotCMS: {json.dumps(vulnerabilities[:10])}"
+                "content": f"Create a summary table for these dotCMS CVEs with status (TP/FP/Mitigated) and controls: {json.dumps(vulnerabilities[:10])}"
             }]
         )
         raw_content = response.content[0].text
     except Exception as e:
         print(f"API Error: {e}")
-        print("Tip: Check if you have exceeded your free tier rate limit (RPM).")
         sys.exit(1)
 
     # 4. Generate PDF
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", 'B', 14)
-    pdf.cell(0, 10, "dotCMS AI Security Scan (Free Tier)", ln=True, align='C')
+    pdf.cell(0, 10, "dotCMS AI Security Scan Report", ln=True, align='C')
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
     pdf.multi_cell(0, 7, clean_for_pdf(raw_content))

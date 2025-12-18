@@ -1,47 +1,40 @@
 name: "DotCMS AI Security Audit"
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual trigger from the Actions tab
 
 jobs:
-  analyze:
-    runs-on: ubuntu-latest  # Now using GitHub's managed runner
+  ai-scan:
+    runs-on: ubuntu-latest
     permissions:
       contents: read
 
     steps:
-      - name: Checkout dotCMS Repo
+      - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Run Trivy Scanner
+        uses: aquasecurity/trivy-action@master
         with:
-          repository: 'dotCMS/dotCMS'
-          path: './dotcms-repo'
-
-      - name: Install Trivy
-        run: |
-          sudo apt-get install wget apt-transport-https gnupg lsb-release
-          wget -qO - https://aquasecurity.github.io/trivy-repo/dabest/public.key | sudo apt-key add -
-          echo deb https://aquasecurity.github.io/trivy-repo/dabest $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update
-          sudo apt-get install trivy
-
-      - name: Run Trivy Scan
-        run: |
-          trivy image --format json --output trivy-results.json dotcms/dotcms:latest
+          image-ref: 'dotcms/dotcms:latest'
+          format: 'json'
+          output: 'trivy-results.json'
+          severity: 'CRITICAL,HIGH'
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Run Claude Analysis
+      - name: Run Claude Analysis and Generate PDF
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           pip install anthropic fpdf2
-          python analyze.py
+          python scripts/analyze.py
 
-      - name: Upload PDF Report
+      - name: Upload Security Report
         uses: actions/upload-artifact@v4
         with:
-          name: dotcms-security-report
+          name: dotcms-ai-report
           path: security_analysis_report.pdf

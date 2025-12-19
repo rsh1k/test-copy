@@ -38,7 +38,7 @@ def run_analysis():
     Perform a deep-dive security analysis of these CVEs against the dotCMS source code (https://github.com/dotCMS/core):
     {json.dumps(vulnerabilities[:10])}
 
-    YOUR MISSION: Create a table with four columns: Number, CVE name, CVE type, description, and Status (✔/✗)
+    YOUR MISSION: Create a table with four columns: Number, CVE name, CVE type(as per OWASP), description, and Status (✔/✗)
     Analyze the dotCMS core functions to determine if compensating controls are present. I don't need full description, I just want the table. If the vulnerability is still present the status should be ✔ and if not present it should be ✗.  
     """
 

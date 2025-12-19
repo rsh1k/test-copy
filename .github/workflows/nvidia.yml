@@ -28,15 +28,13 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # --- 1. Pre-Analysis Cleanup ---
+      # --- 1. Pre-Analysis Cleanup (PERMISSION FIX) ---
       - name: Cleanup Previous Results
         run: |
-          echo "Cleaning up old reports in $REPORT_DIR"
-          if [ -d "$REPORT_DIR" ]; then
-            rm -rf "$REPORT_DIR"/*
-          else
-            mkdir -p "$REPORT_DIR"
-          fi
+          echo "Cleaning up old reports using Docker to bypass permission issues..."
+          # We use a tiny alpine container to delete files owned by root
+          docker run --rm -v /home/rashik/vulnerability-analysis:/data alpine sh -c "rm -rf /data/.tmp/vulnerability_markdown_reports/vulnerability_reports_dotcms_latest/*"
+          mkdir -p "$REPORT_DIR"
 
       # --- 2. Install Tools (Syft/Trivy) ---
       - name: Install Syft and Trivy
@@ -102,24 +100,22 @@ jobs:
       - name: Execute NVIDIA Analysis
         run: |
           cd ${{ github.event.inputs.target_repo_path }}
-          
-          # Login to NVIDIA Registry
           echo "${{ env.NVIDIA_API_KEY }}" | docker login nvcr.io -u '$oauthtoken' --password-stdin
           
-          # Run Analysis
           docker compose run --rm \
             -e NVIDIA_API_KEY="${{ env.NVIDIA_API_KEY }}" \
             -e GHSA_API_KEY="${{ env.GHSA_API_KEY }}" \
             -e NVD_API_KEY="${{ env.NVD_API_KEY }}" \
             vuln-analysis nat run --config ${{ github.workspace }}/${{ github.event.inputs.config_filename }}
 
-      # --- 7. Generate Summary Table and Push to test-copy ---
+      # --- 7. Generate Summary and Push ---
       - name: Process Results and Push to External Repo
         env:
-          # Use a PAT if pushing to a different repo
           RESULTS_REPO: "https://x-access-token:${{ secrets.MY_PAT }}@github.com/rsh1k/test-copy.git"
         run: |
-          # 1. Create Python Table Generator
+          # 1. Fix permissions so Python can read the NVIDIA files
+          sudo chown -R $USER:$USER $REPORT_DIR
+
           cat << 'EOF' > generate_summary.py
           import os
           import json
@@ -144,14 +140,17 @@ jobs:
               md_files = glob.glob(f"{source_dir}/*.md")
               for filepath in sorted(md_files):
                   filename = os.path.basename(filepath)
+                  if filename == "README.md": continue
                   cve_id = filename.replace('.md', '')
                   severity = trivy_data.get(cve_id, "N/A")
                   
                   analysis_status = "Unknown"
-                  with open(filepath, 'r') as f:
-                      content = f.read().lower()
-                      if "false positive" in content: analysis_status = "❌ False Positive"
-                      elif "true positive" in content: analysis_status = "✅ True Positive"
+                  try:
+                      with open(filepath, 'r') as f:
+                          content = f.read().lower()
+                          if "false positive" in content: analysis_status = "❌ False Positive"
+                          elif "true positive" in content: analysis_status = "✅ True Positive"
+                  except: pass
 
                   report_md += f"| {cve_id} | {severity} | {analysis_status} | [View File](./{filename}) |\n"
 
@@ -163,12 +162,10 @@ jobs:
 
           python3 generate_summary.py
 
-          # 2. Clone and Push to test-copy Repo
+          # 2. Push to test-copy Repo
           RUN_FOLDER="run-${{ github.run_number }}"
           git clone $RESULTS_REPO results_repo
           mkdir -p results_repo/$RUN_FOLDER
-          
-          # Copy all reports + the README summary
           cp $REPORT_DIR/*.md results_repo/$RUN_FOLDER/
           
           cd results_repo

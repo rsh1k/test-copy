@@ -1,4 +1,4 @@
-#Run the trivy+Claude AI vuln scanner
+#Run the Trivy + Claude AI vuln scanner
 name: dotCMS Security Analysis (Claude 4.5)
 
 on:

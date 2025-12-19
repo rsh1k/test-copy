@@ -38,8 +38,8 @@ def run_analysis():
     Perform a deep-dive security analysis of these CVEs against the dotCMS source code (https://github.com/dotCMS/core):
     {json.dumps(vulnerabilities[:10])}
 
-    YOUR MISSION: Create a table with four columns: CVE name, CVE type, description, and Status (True/False/Mitigated). 
-    Analyze the dotCMS core functions to determine if compensating or mitigating controls are present.
+    YOUR MISSION: Create a table with four columns: Number, CVE name, CVE type, description, and Status (True/False/Mitigated). 
+    Analyze the dotCMS core functions to determine if compensating or mitigating controls are present. I don't need full description, I just want the table.
     """
 
     response = client.messages.create(

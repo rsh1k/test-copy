@@ -29,14 +29,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # --- 1. Pre-Analysis Cleanup ---
       - name: Cleanup Previous Results
         run: |
-          echo "Cleaning up old reports using Docker..."
+          echo "Cleaning up old reports..."
           docker run --rm -v ${{ env.TOOL_PATH }}:/data alpine sh -c "rm -rf /data/.tmp/vulnerability_markdown_reports/vulnerability_reports_dotcms_latest/*"
           mkdir -p "$REPORT_DIR"
 
-      # --- 2. Install Tools (Local Bin) ---
       - name: Install Syft and Trivy
         run: |
           mkdir -p "$GITHUB_WORKSPACE/bin"
@@ -44,15 +42,12 @@ jobs:
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$GITHUB_WORKSPACE/bin"
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
-      # --- 3. Generate SBOM ---
       - name: Generate SBOM
         run: |
-          # Use the path the NVIDIA tool expects internally
           SBOM_PATH="data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom"
           mkdir -p "$(dirname "$SBOM_PATH")"
           syft scan dir:. -o syft-table > "$SBOM_PATH"
 
-      # --- 4. Trivy Vulnerability Scan ---
       - name: Run Trivy Scan
         run: |
           trivy fs . \
@@ -65,7 +60,7 @@ jobs:
             --skip-dirs "**/src/test,**/node_modules,**/examples,.github/actions" \
             --skip-files "core-web/documentation.json"
 
-      # --- 5. Generate NVIDIA Config ---
+      # --- 5. Generate FIXED NVIDIA Config (Flattened Structure) ---
       - name: Create JSON Config
         run: |
           cat << 'EOF' > update_json_input.py
@@ -74,23 +69,9 @@ jobs:
 
           CONFIG_FILE = os.getenv('CONFIG_FILENAME', 'input_analysis_config.json')
           TRIVY_REPORT = 'cve-report.json'
-          # This matches the path INSIDE the container/tool data structure
+          # Path as seen inside the tool's volume mapping
           SBOM_PATH_REMOTE = "data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom"
 
-          BASE_JSON = {
-              "image": {
-                  "name": "docker.io/dotcms/dotcms", "tag": "latest",
-                  "source_info": [
-                      {"type": "code", "git_repo": "https://github.com/dotCMS/core.git", "ref": "main", "include": ["**/pom.xml", "core/src/main/java/**/*"], "exclude": ["**/target/**"]},
-                      {"type": "doc", "git_repo": "https://github.com/dotCMS/core.git", "ref": "main", "include": ["README.md", "SECURITY.md"]}
-                  ],
-                  "sbom_info": { "_type": "file", "file_path": SBOM_PATH_REMOTE },
-                  "dependency_files": ["**/pom.xml", "**/package.json"],
-                  "build_system": "maven"
-              },
-              "scan": { "vulns": [] }
-          }
-          
           def extract_cve_ids(report_path):
               cve_ids = set()
               if not os.path.exists(report_path): return []
@@ -100,47 +81,55 @@ jobs:
                       cve_ids.add(vuln.get('VulnerabilityID'))
               return [{"vuln_id": cid} for cid in sorted(list(cve_ids)) if cid]
 
-          BASE_JSON['scan']['vulns'] = extract_cve_ids(TRIVY_REPORT)
+          # FIXED: Flattened structure according to NVIDIA Blueprint Schema
+          CONFIG_DATA = {
+              "name": "docker.io/dotcms/dotcms",
+              "tag": "latest",
+              "source_info": [
+                  {
+                      "type": "code", 
+                      "git_repo": "https://github.com/dotCMS/core.git", 
+                      "ref": "main", 
+                      "include": ["**/pom.xml", "core/src/main/java/**/*"], 
+                      "exclude": ["**/target/**"]
+                  }
+              ],
+              "sbom_info": { "_type": "file", "file_path": SBOM_PATH_REMOTE },
+              "dependency_files": ["**/pom.xml", "**/package.json"],
+              "build_system": "maven",
+              "vulns": extract_cve_ids(TRIVY_REPORT)
+          }
+          
           with open(CONFIG_FILE, 'w') as f:
-              json.dump(BASE_JSON, f, indent=2)
+              json.dump(CONFIG_DATA, f, indent=2)
           EOF
           python3 update_json_input.py
         env:
           CONFIG_FILENAME: ${{ github.event.inputs.config_filename }}
 
-      # --- 6. Prepare Files and Run NVIDIA Scanner ---
       - name: Execute NVIDIA Analysis
         run: |
-          # Define Host paths
           INPUT_DIR="${{ env.TOOL_PATH }}/data/input_messages"
           SBOM_DEST_DIR="${{ env.TOOL_PATH }}/data/sboms/docker.io/dotcms/dotcms"
           
-          # Create tool directories if they don't exist
           mkdir -p "$INPUT_DIR"
           mkdir -p "$SBOM_DEST_DIR"
           
-          # Copy files from GitHub Workspace to Tool Data Directory
           cp "${{ github.workspace }}/${{ github.event.inputs.config_filename }}" "$INPUT_DIR/"
           cp "${{ github.workspace }}/data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom" "$SBOM_DEST_DIR/"
 
           cd ${{ env.TOOL_PATH }}
-          
-          # Login to NGC
           echo "${{ env.NVIDIA_API_KEY }}" | docker login nvcr.io -u '$oauthtoken' --password-stdin
-          
-          # Ensure containers are up
           docker compose up -d
           
-          # Run the analysis tool with the correct flag: --config_file
-          # Note: We point to the path as it appears INSIDE the container
+          # Using exec -T for non-interactive run
           docker compose exec -T \
             -e NVIDIA_API_KEY="${{ env.NVIDIA_API_KEY }}" \
             -e GHSA_API_KEY="${{ env.GHSA_API_KEY }}" \
             -e NVD_API_KEY="${{ env.NVD_API_KEY }}" \
             vuln-analysis nat run --config_file "data/input_messages/${{ github.event.inputs.config_filename }}"
 
-      # --- 7. Generate Table and Push ---
-      - name: Process Results and Push to External Repo
+      - name: Process Results and Push
         env:
           RESULTS_REPO: "https://x-access-token:${{ secrets.MY_PAT }}@github.com/rsh1k/test-copy.git"
         run: |

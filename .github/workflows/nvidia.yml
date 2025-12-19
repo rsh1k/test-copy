@@ -7,10 +7,10 @@ on:
         description: 'Path to the tool repo on the server'
         required: true
         default: '/home/rashik/vulnerability-analysis'
-      config_filename:
-        description: 'Name of the generated JSON config file'
+      input_filename:
+        description: 'Name of the generated JSON input file'
         required: true
-        default: 'input_analysis_config.json'
+        default: 'input.json'
 
 jobs:
   full-analysis-pipeline:
@@ -29,12 +29,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # --- 1. Cleanup Previous Results ---
       - name: Cleanup Previous Results
         run: |
-          echo "Cleaning up old reports using Docker..."
+          echo "Cleaning up old reports..."
           docker run --rm -v ${{ env.TOOL_PATH }}:/data alpine sh -c "rm -rf /data/.tmp/vulnerability_markdown_reports/vulnerability_reports_dotcms_latest/*"
           mkdir -p "$REPORT_DIR"
 
+      # --- 2. Install Tools (Syft & Trivy) ---
       - name: Install Syft and Trivy
         run: |
           mkdir -p "$GITHUB_WORKSPACE/bin"
@@ -42,12 +44,15 @@ jobs:
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$GITHUB_WORKSPACE/bin"
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
+      # --- 3. Generate SBOM ---
       - name: Generate SBOM
         run: |
-          SBOM_PATH="data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom"
+          # Use the filename expected in the JSON: dotcms.sbom
+          SBOM_PATH="data/sboms/docker.io/dotcms/dotcms/dotcms.sbom"
           mkdir -p "$(dirname "$SBOM_PATH")"
           syft scan dir:. -o syft-table > "$SBOM_PATH"
 
+      # --- 4. Trivy Vulnerability Scan ---
       - name: Run Trivy Scan
         run: |
           trivy fs . \
@@ -60,16 +65,15 @@ jobs:
             --skip-dirs "**/src/test,**/node_modules,**/examples,.github/actions" \
             --skip-files "core-web/documentation.json"
 
-      # --- 5. Generate NVIDIA Config (RE-WRAPPED FOR SCHEMA VALIDATION) ---
-      - name: Create JSON Config
+      # --- 5. Generate JSON Input File (Matches your provided structure) ---
+      - name: Create JSON Input File
         run: |
-          cat << 'EOF' > update_json_input.py
+          cat << 'EOF' > create_input_json.py
           import json
           import os
 
-          CONFIG_FILE = os.getenv('CONFIG_FILENAME', 'input_analysis_config.json')
+          INPUT_FILE = os.getenv('INPUT_FILENAME', 'input.json')
           TRIVY_REPORT = 'cve-report.json'
-          SBOM_PATH_REMOTE = "data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom"
 
           def extract_cve_ids(report_path):
               cve_ids = set()
@@ -80,34 +84,63 @@ jobs:
                       cve_ids.add(vuln.get('VulnerabilityID'))
               return [{"vuln_id": cid} for cid in sorted(list(cve_ids)) if cid]
 
-          # SCHEMA FIX: The tool expects 'image' as the root key containing all fields
-          CONFIG_DATA = {
+          # Full structure based on user requirements
+          DATA = {
               "image": {
                   "name": "docker.io/dotcms/dotcms",
                   "tag": "latest",
                   "source_info": [
                       {
-                          "type": "code", 
-                          "git_repo": "https://github.com/dotCMS/core.git", 
-                          "ref": "main", 
-                          "include": ["**/pom.xml", "core/src/main/java/**/*"], 
-                          "exclude": ["**/target/**"]
+                          "type": "code",
+                          "git_repo": "https://github.com/dotCMS/core.git",
+                          "ref": "main",
+                          "include": [
+                              "**/pom.xml", "pom.xml", "parent/pom.xml", "build-parent/pom.xml", "bom/pom.xml",
+                              "dotCMS/pom.xml", "core-web/pom.xml", "dotcms-integration/pom.xml", 
+                              "core/src/main/java/**/*", "core/src/main/resources/**/*", 
+                              "dotCMS/src/main/java/**/*", "dotCMS/src/main/resources/**/*", 
+                              "dotCMS/WEB-INF/**/*", "dotcms-integration/src/main/java/**/*", 
+                              "core-web/src/main/java/**/*", "core-web/src/main/resources/**/*",
+                              "environments/*/elasticsearch.yml", "environments/*/opensearch.yml",
+                              "docker/*/elasticsearch.yml", "config/elasticsearch.yml", "config/opensearch.yml",
+                              "**/tika-config.xml", "**/dotmarketing-config.properties", "**/user.properties",
+                              "**/private.xml", "**/security-*.properties", "**/web.xml", "**/src/main/java/**/*",
+                              "docker/Dockerfile", "docker-compose.yml", "SECURITY.md", "README.md",
+                              "yarn.lock", "package-lock.json", "**/package.json"
+                          ],
+                          "exclude": [
+                              "**/target/**", "**/build/**", "**/node_modules/**", "**/dist/**", 
+                              "**/*.min.js", "**/src/test/**", "**/src/integration-test/**", 
+                              "**/.git/**", "**/.gradle/**", "**/docs/**"
+                          ]
+                      },
+                      {
+                          "type": "doc",
+                          "git_repo": "https://github.com/dotCMS/core.git",
+                          "ref": "main",
+                          "include": ["README.md", "LICENSE", "CHANGELOG.md", "SECURITY.md"]
                       }
                   ],
-                  "sbom_info": { "_type": "file", "file_path": SBOM_PATH_REMOTE },
-                  "dependency_files": ["**/pom.xml", "**/package.json"],
-                  "build_system": "maven",
+                  "sbom_info": {
+                      "_type": "file",
+                      "file_path": "data/sboms/docker.io/dotcms/dotcms/dotcms.sbom"
+                  },
+                  "dependency_files": ["**/pom.xml", "**/package.json", "yarn.lock", "package-lock.json"],
+                  "build_system": "maven"
+              },
+              "scan": {
                   "vulns": extract_cve_ids(TRIVY_REPORT)
               }
           }
           
-          with open(CONFIG_FILE, 'w') as f:
-              json.dump(CONFIG_DATA, f, indent=2)
+          with open(INPUT_FILE, 'w') as f:
+              json.dump(DATA, f, indent=2)
           EOF
-          python3 update_json_input.py
+          python3 create_input_json.py
         env:
-          CONFIG_FILENAME: ${{ github.event.inputs.config_filename }}
+          INPUT_FILENAME: ${{ github.event.inputs.input_filename }}
 
+      # --- 6. Stage Files and Run NVIDIA Scanner ---
       - name: Execute NVIDIA Analysis
         run: |
           INPUT_DIR="${{ env.TOOL_PATH }}/data/input_messages"
@@ -116,20 +149,28 @@ jobs:
           mkdir -p "$INPUT_DIR"
           mkdir -p "$SBOM_DEST_DIR"
           
-          cp "${{ github.workspace }}/${{ github.event.inputs.config_filename }}" "$INPUT_DIR/"
-          cp "${{ github.workspace }}/data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom" "$SBOM_DEST_DIR/"
+          # Move local artifacts to remote tool folders
+          cp "${{ github.workspace }}/${{ github.event.inputs.input_filename }}" "$INPUT_DIR/input.json"
+          cp "${{ github.workspace }}/data/sboms/docker.io/dotcms/dotcms/dotcms.sbom" "$SBOM_DEST_DIR/"
 
           cd ${{ env.TOOL_PATH }}
+          
+          # Login to NGC
           echo "${{ env.NVIDIA_API_KEY }}" | docker login nvcr.io -u '$oauthtoken' --password-stdin
+          
+          # Ensure tool is running
           docker compose up -d
           
-          # Using exec -T for non-interactive run
+          # RUN COMMAND AS SPECIFIED:
           docker compose exec -T \
             -e NVIDIA_API_KEY="${{ env.NVIDIA_API_KEY }}" \
             -e GHSA_API_KEY="${{ env.GHSA_API_KEY }}" \
             -e NVD_API_KEY="${{ env.NVD_API_KEY }}" \
-            vuln-analysis nat run --config_file "data/input_messages/${{ github.event.inputs.config_filename }}"
+            vuln-analysis nat run \
+            --config_file="configs/config.yml" \
+            --input_file="data/input_messages/input.json"
 
+      # --- 7. Generate Summary and Push to test-copy Repo ---
       - name: Process Results and Push
         env:
           RESULTS_REPO: "https://x-access-token:${{ secrets.MY_PAT }}@github.com/rsh1k/test-copy.git"
@@ -165,15 +206,15 @@ jobs:
                   cve_id = filename.replace('.md', '')
                   severity = trivy_data.get(cve_id, "N/A")
                   
-                  analysis_status = "Pending review"
+                  status = "Pending review"
                   try:
                       with open(filepath, 'r') as f:
                           content = f.read().lower()
-                          if "false positive" in content: analysis_status = "❌ False Positive"
-                          elif "true positive" in content: analysis_status = "✅ True Positive"
+                          if "false positive" in content: status = "❌ False Positive"
+                          elif "true positive" in content: status = "✅ True Positive"
                   except: pass
 
-                  report_md += f"| {cve_id} | {severity} | {analysis_status} | [View File](./{filename}) |\n"
+                  report_md += f"| {cve_id} | {severity} | {status} | [View File](./{filename}) |\n"
 
               with open(os.path.join(source_dir, "README.md"), "w") as f:
                   f.write(report_md)

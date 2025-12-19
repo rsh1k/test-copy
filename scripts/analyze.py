@@ -31,12 +31,7 @@ def run_analysis():
     Perform a deep-dive security analysis of these CVEs against the dotCMS source code (https://github.com/dotCMS/core):
     {json.dumps(vulnerabilities[:10])}
 
-    YOUR MISSION:
-    1. Identify existing mitigating controls within dotCMS core functions (e.g., FileUtil.sanitizeFileName, ContentResource, SecurityLogger).
-    2. Explicitly categorize findings as "☑ FALSE POSITIVE" (if mitigated by code) or "☑ TRUE POSITIVE" (if requiring patch).
-    3. REPLICATE THE FORMAT OF scan.pdf:
-       - Include "Code-Based Evidence of Mitigations" with Java snippets.
-       - Include "Risk Assessment" tables with Factor, Rating, and Evidence Source columns.
+    YOUR MISSION: Create a table with four column: CVE name, CVE type, description and then the status(true/false,etc). Please note you have to go through each functions in the code and find out if compensating or mitigating controls are present or not.
     """
 
     response = client.messages.create(

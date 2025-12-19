@@ -31,7 +31,7 @@ jobs:
 
       - name: Cleanup Previous Results
         run: |
-          echo "Cleaning up old reports..."
+          echo "Cleaning up old reports using Docker..."
           docker run --rm -v ${{ env.TOOL_PATH }}:/data alpine sh -c "rm -rf /data/.tmp/vulnerability_markdown_reports/vulnerability_reports_dotcms_latest/*"
           mkdir -p "$REPORT_DIR"
 
@@ -60,7 +60,7 @@ jobs:
             --skip-dirs "**/src/test,**/node_modules,**/examples,.github/actions" \
             --skip-files "core-web/documentation.json"
 
-      # --- 5. Generate FIXED NVIDIA Config (Flattened Structure) ---
+      # --- 5. Generate NVIDIA Config (RE-WRAPPED FOR SCHEMA VALIDATION) ---
       - name: Create JSON Config
         run: |
           cat << 'EOF' > update_json_input.py
@@ -69,7 +69,6 @@ jobs:
 
           CONFIG_FILE = os.getenv('CONFIG_FILENAME', 'input_analysis_config.json')
           TRIVY_REPORT = 'cve-report.json'
-          # Path as seen inside the tool's volume mapping
           SBOM_PATH_REMOTE = "data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom"
 
           def extract_cve_ids(report_path):
@@ -81,23 +80,25 @@ jobs:
                       cve_ids.add(vuln.get('VulnerabilityID'))
               return [{"vuln_id": cid} for cid in sorted(list(cve_ids)) if cid]
 
-          # FIXED: Flattened structure according to NVIDIA Blueprint Schema
+          # SCHEMA FIX: The tool expects 'image' as the root key containing all fields
           CONFIG_DATA = {
-              "name": "docker.io/dotcms/dotcms",
-              "tag": "latest",
-              "source_info": [
-                  {
-                      "type": "code", 
-                      "git_repo": "https://github.com/dotCMS/core.git", 
-                      "ref": "main", 
-                      "include": ["**/pom.xml", "core/src/main/java/**/*"], 
-                      "exclude": ["**/target/**"]
-                  }
-              ],
-              "sbom_info": { "_type": "file", "file_path": SBOM_PATH_REMOTE },
-              "dependency_files": ["**/pom.xml", "**/package.json"],
-              "build_system": "maven",
-              "vulns": extract_cve_ids(TRIVY_REPORT)
+              "image": {
+                  "name": "docker.io/dotcms/dotcms",
+                  "tag": "latest",
+                  "source_info": [
+                      {
+                          "type": "code", 
+                          "git_repo": "https://github.com/dotCMS/core.git", 
+                          "ref": "main", 
+                          "include": ["**/pom.xml", "core/src/main/java/**/*"], 
+                          "exclude": ["**/target/**"]
+                      }
+                  ],
+                  "sbom_info": { "_type": "file", "file_path": SBOM_PATH_REMOTE },
+                  "dependency_files": ["**/pom.xml", "**/package.json"],
+                  "build_system": "maven",
+                  "vulns": extract_cve_ids(TRIVY_REPORT)
+              }
           }
           
           with open(CONFIG_FILE, 'w') as f:

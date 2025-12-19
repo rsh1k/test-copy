@@ -109,7 +109,7 @@ jobs:
                               "yarn.lock", "package-lock.json", "**/package.json"
                           ],
                           "exclude": [
-                              "**/target/**", "**/build/**", "**/node_modules/**", "**/dist/**", 
+                              "**/*","**/target/**", "**/build/**", "**/node_modules/**", "**/dist/**", 
                               "**/*.min.js", "**/src/test/**", "**/src/integration-test/**", 
                               "**/.git/**", "**/.gradle/**", "**/docs/**"
                           ]

@@ -28,19 +28,21 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # --- 1. Pre-Analysis Cleanup (PERMISSION FIX) ---
+      # --- 1. Pre-Analysis Cleanup (Handles root-owned files) ---
       - name: Cleanup Previous Results
         run: |
-          echo "Cleaning up old reports using Docker to bypass permission issues..."
-          # We use a tiny alpine container to delete files owned by root
+          echo "Cleaning up old reports using Docker..."
+          # Using alpine to delete files created by the NVIDIA root container
           docker run --rm -v /home/rashik/vulnerability-analysis:/data alpine sh -c "rm -rf /data/.tmp/vulnerability_markdown_reports/vulnerability_reports_dotcms_latest/*"
           mkdir -p "$REPORT_DIR"
 
-      # --- 2. Install Tools (Syft/Trivy) ---
+      # --- 2. Install Tools (Local Bin to avoid /usr/local/bin permissions) ---
       - name: Install Syft and Trivy
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          mkdir -p $GITHUB_WORKSPACE/bin
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b $GITHUB_WORKSPACE/bin
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b $GITHUB_WORKSPACE/bin
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
       # --- 3. Generate SBOM ---
       - name: Generate SBOM
@@ -54,7 +56,7 @@ jobs:
         run: |
           trivy fs . --format json --severity CRITICAL,HIGH --output cve-report.json --exit-code 0
 
-      # --- 5. Generate NVIDIA Config (Python) ---
+      # --- 5. Generate NVIDIA Config ---
       - name: Create JSON Config
         run: |
           cat << 'EOF' > update_json_input.py
@@ -108,12 +110,13 @@ jobs:
             -e NVD_API_KEY="${{ env.NVD_API_KEY }}" \
             vuln-analysis nat run --config ${{ github.workspace }}/${{ github.event.inputs.config_filename }}
 
-      # --- 7. Generate Summary and Push ---
+      # --- 7. Generate Table and Push to Remote Repo ---
       - name: Process Results and Push to External Repo
         env:
+          # Make sure MY_PAT is a secret in your repo settings
           RESULTS_REPO: "https://x-access-token:${{ secrets.MY_PAT }}@github.com/rsh1k/test-copy.git"
         run: |
-          # 1. Fix permissions so Python can read the NVIDIA files
+          # Change ownership from root back to rashik so Python can read files
           sudo chown -R $USER:$USER $REPORT_DIR
 
           cat << 'EOF' > generate_summary.py
@@ -144,7 +147,7 @@ jobs:
                   cve_id = filename.replace('.md', '')
                   severity = trivy_data.get(cve_id, "N/A")
                   
-                  analysis_status = "Unknown"
+                  analysis_status = "Pending review"
                   try:
                       with open(filepath, 'r') as f:
                           content = f.read().lower()
@@ -162,10 +165,12 @@ jobs:
 
           python3 generate_summary.py
 
-          # 2. Push to test-copy Repo
-          RUN_FOLDER="run-${{ github.run_number }}"
+          # Clone results repo, move files to a specific run folder, and push
+          RUN_FOLDER="run-${{ github.run_number }}-${{ github.run_id }}"
           git clone $RESULTS_REPO results_repo
           mkdir -p results_repo/$RUN_FOLDER
+          
+          # Copy reports and the generated README
           cp $REPORT_DIR/*.md results_repo/$RUN_FOLDER/
           
           cd results_repo

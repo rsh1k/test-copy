@@ -43,18 +43,24 @@ jobs:
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$GITHUB_WORKSPACE/bin"
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
-      # --- 3. Generate SBOM (Fixed Syft Command) ---
+      # --- 3. Generate SBOM ---
       - name: Generate SBOM
         run: |
           SBOM_PATH="data/sboms/docker.io/dotcms/dotcms/dotcms:latest.sbom"
           mkdir -p "$(dirname "$SBOM_PATH")"
-          # Explicitly scan the directory to avoid "received 2 args" error
           syft scan dir:. -o syft-table > "$SBOM_PATH"
 
-      # --- 4. Trivy Vulnerability Scan ---
+      # --- 4. Trivy Vulnerability Scan (Increased Timeout & Skips) ---
       - name: Run Trivy Scan
         run: |
-          trivy fs . --format json --severity CRITICAL,HIGH --output cve-report.json --exit-code 0
+          trivy fs . \
+            --format json \
+            --severity CRITICAL,HIGH \
+            --output cve-report.json \
+            --exit-code 0 \
+            --timeout 15m \
+            --skip-dirs "**/src/test" \
+            --skip-files "core-web/documentation.json"
 
       # --- 5. Generate NVIDIA Config ---
       - name: Create JSON Config

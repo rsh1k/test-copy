@@ -22,6 +22,7 @@ jobs:
       NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
       GHSA_API_KEY: ${{ secrets.GHSA_API_KEY }}
       NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+      SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}  # <--- ADDED KEY
       TOOL_PATH: "/home/rashik/vulnerability-analysis"
       REPORT_DIR: "/home/rashik/vulnerability-analysis/.tmp/vulnerability_markdown_reports/vulnerability_reports_dotcms_latest"
       
@@ -29,14 +30,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # --- 1. Cleanup Previous Results ---
+      # --- 1. Pre-Analysis Cleanup ---
       - name: Cleanup Previous Results
         run: |
           echo "Cleaning up old reports..."
           docker run --rm -v ${{ env.TOOL_PATH }}:/data alpine sh -c "rm -rf /data/.tmp/vulnerability_markdown_reports/vulnerability_reports_dotcms_latest/*"
           mkdir -p "$REPORT_DIR"
 
-      # --- 2. Install Tools (Syft & Trivy) ---
+      # --- 2. Install Tools (Local Bin) ---
       - name: Install Syft and Trivy
         run: |
           mkdir -p "$GITHUB_WORKSPACE/bin"
@@ -47,7 +48,6 @@ jobs:
       # --- 3. Generate SBOM ---
       - name: Generate SBOM
         run: |
-          # Use the filename expected in the JSON: dotcms.sbom
           SBOM_PATH="data/sboms/docker.io/dotcms/dotcms/dotcms.sbom"
           mkdir -p "$(dirname "$SBOM_PATH")"
           syft scan dir:. -o syft-table > "$SBOM_PATH"
@@ -65,7 +65,7 @@ jobs:
             --skip-dirs "**/src/test,**/node_modules,**/examples,.github/actions" \
             --skip-files "core-web/documentation.json"
 
-      # --- 5. Generate JSON Input File (Matches your provided structure) ---
+      # --- 5. Generate JSON Input File (Strict Exclusion Mode) ---
       - name: Create JSON Input File
         run: |
           cat << 'EOF' > create_input_json.py
@@ -84,7 +84,6 @@ jobs:
                       cve_ids.add(vuln.get('VulnerabilityID'))
               return [{"vuln_id": cid} for cid in sorted(list(cve_ids)) if cid]
 
-          # Full structure based on user requirements
           DATA = {
               "image": {
                   "name": "docker.io/dotcms/dotcms",
@@ -108,17 +107,14 @@ jobs:
                               "docker/Dockerfile", "docker-compose.yml", "SECURITY.md", "README.md",
                               "yarn.lock", "package-lock.json", "**/package.json"
                           ],
-                          "exclude": [
-                              "**/*","**/target/**", "**/build/**", "**/node_modules/**", "**/dist/**", 
-                              "**/*.min.js", "**/src/test/**", "**/src/integration-test/**", 
-                              "**/.git/**", "**/.gradle/**", "**/docs/**"
-                          ]
+                          "exclude": ["**/*"] 
                       },
                       {
                           "type": "doc",
                           "git_repo": "https://github.com/dotCMS/core.git",
                           "ref": "main",
-                          "include": ["README.md", "LICENSE", "CHANGELOG.md", "SECURITY.md"]
+                          "include": ["README.md", "LICENSE", "CHANGELOG.md", "SECURITY.md"],
+                          "exclude": ["**/*"]
                       }
                   ],
                   "sbom_info": {
@@ -149,28 +145,24 @@ jobs:
           mkdir -p "$INPUT_DIR"
           mkdir -p "$SBOM_DEST_DIR"
           
-          # Move local artifacts to remote tool folders
           cp "${{ github.workspace }}/${{ github.event.inputs.input_filename }}" "$INPUT_DIR/input.json"
           cp "${{ github.workspace }}/data/sboms/docker.io/dotcms/dotcms/dotcms.sbom" "$SBOM_DEST_DIR/"
 
           cd ${{ env.TOOL_PATH }}
-          
-          # Login to NGC
           echo "${{ env.NVIDIA_API_KEY }}" | docker login nvcr.io -u '$oauthtoken' --password-stdin
-          
-          # Ensure tool is running
           docker compose up -d
           
-          # RUN COMMAND AS SPECIFIED:
+          # Added SERPAPI_API_KEY to the execution environment
           docker compose exec -T \
             -e NVIDIA_API_KEY="${{ env.NVIDIA_API_KEY }}" \
             -e GHSA_API_KEY="${{ env.GHSA_API_KEY }}" \
             -e NVD_API_KEY="${{ env.NVD_API_KEY }}" \
+            -e SERPAPI_API_KEY="${{ env.SERPAPI_API_KEY }}" \
             vuln-analysis nat run \
             --config_file="configs/config.yml" \
             --input_file="data/input_messages/input.json"
 
-      # --- 7. Generate Summary and Push to test-copy Repo ---
+      # --- 7. Generate Summary and Push ---
       - name: Process Results and Push
         env:
           RESULTS_REPO: "https://x-access-token:${{ secrets.MY_PAT }}@github.com/rsh1k/test-copy.git"
@@ -195,7 +187,7 @@ jobs:
                           for v in res.get('Vulnerabilities', []):
                               trivy_data[v['VulnerabilityID']] = v.get('Severity', 'UNKNOWN')
 
-              report_md = f"# Scan Results: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+              report_md = f"# Scan Results Summary: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
               report_md += "| CVE ID | Severity | NVIDIA Analysis | Report Link |\n"
               report_md += "| :--- | :--- | :--- | :--- |\n"
 
@@ -224,7 +216,7 @@ jobs:
 
           python3 generate_summary.py
 
-          RUN_FOLDER="run-${{ github.run_number }}-${{ github.run_id }}"
+          RUN_FOLDER="run-${{ github.run_number }}"
           git clone $RESULTS_REPO results_repo
           mkdir -p "results_repo/$RUN_FOLDER"
           cp "$REPORT_DIR"/*.md "results_repo/$RUN_FOLDER/"
@@ -233,5 +225,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Reports for run ${{ github.run_number }}"
+          git commit -m "SEC: Vulnerability reports for run ${{ github.run_number }}"
           git push

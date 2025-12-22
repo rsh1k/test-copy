@@ -5,7 +5,7 @@ from anthropic import Anthropic
 
 def run_analysis():
     # Model ID for Claude 4.5
-    MODEL_NAME = "claude-3-5-sonnet-20241022" # Note: Use your preferred stable model ID
+    MODEL_NAME = "claude-sonnet-4-5" # Note: Use your preferred stable model ID
     
     # Load Trivy Results
     trivy_file = 'trivy-results.json'

@@ -1,5 +1,4 @@
-# Run the Trivy + Claude AI vuln scanner to scan dotCMS docker image
-name: dotCMS Security Analysis (Claude 4.5)
+name: dotCMS Security Analysis (Claude)
 
 on:
   push:
@@ -22,7 +21,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install Analysis Tools
-        run: pip install anthropic markdown-pdf
+        run: pip install anthropic
 
       - name: Run Trivy Scan
         uses: aquasecurity/trivy-action@master
@@ -31,13 +30,13 @@ jobs:
           format: 'json'
           output: 'trivy-results.json'
 
-      - name: Generate Report via Claude 4.5
+      - name: Generate and Append Report
         run: python scripts/analyze.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Commit Report to Repository
+      - name: Commit Updated Markdown
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Updated dotCMS Validation Report (Claude 4.5) [skip ci]"
-          file_pattern: 'security-reports/*.pdf'
+          commit_message: "Append dotCMS Security Table to private_issue.md [skip ci]"
+          file_pattern: 'private_issue.md'

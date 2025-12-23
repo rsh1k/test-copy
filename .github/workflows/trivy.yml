@@ -27,7 +27,7 @@ jobs:
       - name: Run Trivy Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'dotcms/dotcms:latest'
+          image-ref: 'dotcms/dotcms:25.07.10_lts_v2'
           format: 'json'
           output: 'trivy-results.json'
 

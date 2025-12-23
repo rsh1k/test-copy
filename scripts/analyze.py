@@ -4,8 +4,8 @@ import sys
 from anthropic import Anthropic
 
 def run_analysis():
-    # Model ID (Note: Use "claude-3-5-sonnet-20241022" or your current active API model)
-    MODEL_NAME = "Claude-Sonnet-4.5" 
+    # Model ID 
+    MODEL_NAME = "claude-sonnet-4-5" 
     
     # Load Trivy Results
     trivy_file = 'trivy-results.json'

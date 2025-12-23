@@ -4,10 +4,9 @@ import sys
 from anthropic import Anthropic
 
 def run_analysis():
-    # Use the specific Claude 4.5 Sonnet identifier
+    # Exact model name as specified
     MODEL_NAME = "claude-sonnet-4-5"
     
-    # Load Trivy Results
     trivy_file = 'trivy-results.json'
     if not os.path.exists(trivy_file):
         print(f"Error: {trivy_file} not found.")
@@ -16,7 +15,6 @@ def run_analysis():
     with open(trivy_file, 'r', encoding='utf-8') as f:
         trivy_data = json.load(f)
 
-    # Prepare data for Claude
     vulnerabilities = [
         {
             "id": v.get('VulnerabilityID'),
@@ -36,53 +34,47 @@ def run_analysis():
     Perform a deep-dive security analysis of these CVEs against the dotCMS source code (https://github.com/dotCMS/core):
     {json.dumps(vulnerabilities[:10])}
 
-    YOUR MISSION: Create a markdown table with columns: Number, CVE name, CVE type (OWASP), Description, and Status (✔/✗).
-    Analyze dotCMS core functions for compensating controls. 
+    MISSION: Create a Markdown table with columns: Number, CVE name, CVE type (OWASP), Description, and Status (✔/✗).
+    Analyze dotCMS core functions for compensating controls.
     If the vulnerability is present: ✔. If not: ✗.
-    ONLY return the markdown table, no extra text.
+    ONLY return the markdown table.
     """
 
-    try:
-        response = client.messages.create(
-            model=MODEL_NAME,
-            max_tokens=4000,
-            system="You are a Senior Security Architect with expert knowledge of the dotCMS/core repository.",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        report_table = response.content[0].text
-    except Exception as e:
-        print(f"Error calling Anthropic API: {e}")
-        sys.exit(1)
+    response = client.messages.create(
+        model=MODEL_NAME,
+        max_tokens=4000,
+        system="You are a Senior Security Architect with expert knowledge of the dotCMS/core repository.",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    report_table = response.content[0].text
 
-    # File path and marker
     target_file = "private_issue.md"
     marker = ""
 
-    # Ensure file exists
-    if not os.path.exists(target_file):
-        print(f"{target_file} not found. Creating it.")
-        with open(target_file, "w", encoding="utf-8") as f:
-            f.write(f"# Security Report\n\n{marker}\n")
-
-    # Read current content
-    with open(target_file, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    # Replacement logic
-    if marker in content:
-        # Split safely: only take the part before the marker
-        header_part = content.split(marker)[0]
-        new_content = f"{header_part}{marker}\n\n{report_table}\n"
+    # Step 1: Read existing file
+    if os.path.exists(target_file):
+        with open(target_file, "r", encoding="utf-8") as f:
+            content = f.read()
     else:
-        # If marker is missing, append it and the table to the end
-        print(f"Marker not found in {target_file}. Appending to the end.")
+        content = f"# Security Report\n\n{marker}\n"
+
+    # Step 2: Replace content after the marker
+    marker_index = content.find(marker)
+    
+    if marker_index != -1:
+        # We found the marker. Keep everything up to the end of the marker line.
+        header = content[:marker_index + len(marker)]
+        new_content = f"{header}\n\n{report_table}\n"
+    else:
+        # Marker not found, just append it
+        print(f"Marker not found. Appending to {target_file}")
         new_content = f"{content}\n\n{marker}\n\n{report_table}\n"
 
-    # Write back to file
+    # Step 3: Save the file
     with open(target_file, "w", encoding="utf-8") as f:
         f.write(new_content)
     
-    print(f"Report updated in {target_file} using {MODEL_NAME}")
+    print(f"Successfully updated {target_file} using {MODEL_NAME}")
 
 if __name__ == "__main__":
     run_analysis()

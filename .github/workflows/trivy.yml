@@ -1,4 +1,4 @@
-#run
+#Run trivy + claude workflow
 name: dotCMS Security Analysis (Claude)
 
 on:

@@ -4,7 +4,7 @@ import sys
 from anthropic import Anthropic
 
 def run_analysis():
-    # Model ID as requested
+    # Use the specific Claude 4.5 Sonnet identifier
     MODEL_NAME = "claude-sonnet-4-5"
     
     # Load Trivy Results
@@ -16,17 +16,15 @@ def run_analysis():
     with open(trivy_file, 'r', encoding='utf-8') as f:
         trivy_data = json.load(f)
 
-    # Extract vulnerabilities
-    vulnerabilities = []
-    for result in trivy_data.get('Results', []):
-        for v in result.get('Vulnerabilities', []):
-            vulnerabilities.append({
-                "id": v.get('VulnerabilityID'),
-                "pkg": v.get('PkgName'),
-                "severity": v.get('Severity')
-            })
+    # Prepare data for Claude
+    vulnerabilities = [
+        {
+            "id": v.get('VulnerabilityID'),
+            "pkg": v.get('PkgName'),
+            "severity": v.get('Severity')
+        } for result in trivy_data.get('Results', []) for v in result.get('Vulnerabilities', [])
+    ]
 
-    # Anthropic Client Setup
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         print("Error: ANTHROPIC_API_KEY not set.")
@@ -38,46 +36,53 @@ def run_analysis():
     Perform a deep-dive security analysis of these CVEs against the dotCMS source code (https://github.com/dotCMS/core):
     {json.dumps(vulnerabilities[:10])}
 
-    MISSION: Create a Markdown table with columns: Number, CVE name, CVE type (OWASP), Description, and Status (✔/✗).
-    Analyze dotCMS core functions for compensating controls.
+    YOUR MISSION: Create a markdown table with columns: Number, CVE name, CVE type (OWASP), Description, and Status (✔/✗).
+    Analyze dotCMS core functions for compensating controls. 
     If the vulnerability is present: ✔. If not: ✗.
-    ONLY return the markdown table.
+    ONLY return the markdown table, no extra text.
     """
 
-    response = client.messages.create(
-        model=MODEL_NAME,
-        max_tokens=4000,
-        system="You are a Senior Security Architect with expert knowledge of the dotCMS/core repository.",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    report_table = response.content[0].text
+    try:
+        response = client.messages.create(
+            model=MODEL_NAME,
+            max_tokens=4000,
+            system="You are a Senior Security Architect with expert knowledge of the dotCMS/core repository.",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        report_table = response.content[0].text
+    except Exception as e:
+        print(f"Error calling Anthropic API: {e}")
+        sys.exit(1)
 
-    # File logic
+    # File path and marker
     target_file = "private_issue.md"
     marker = ""
 
+    # Ensure file exists
     if not os.path.exists(target_file):
-        print(f"Error: {target_file} not found. Creating it...")
+        print(f"{target_file} not found. Creating it.")
         with open(target_file, "w", encoding="utf-8") as f:
-            f.write(f"# Security Analysis\n\n{marker}\n")
+            f.write(f"# Security Report\n\n{marker}\n")
 
+    # Read current content
     with open(target_file, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # The Replacement Logic
+    # Replacement logic
     if marker in content:
-        # Keep everything before the marker, then add the marker and the new table
+        # Split safely: only take the part before the marker
         header_part = content.split(marker)[0]
         new_content = f"{header_part}{marker}\n\n{report_table}\n"
     else:
-        # Fallback: if marker is missing, append everything
-        print("Marker not found in file. Appending to end.")
+        # If marker is missing, append it and the table to the end
+        print(f"Marker not found in {target_file}. Appending to the end.")
         new_content = f"{content}\n\n{marker}\n\n{report_table}\n"
 
+    # Write back to file
     with open(target_file, "w", encoding="utf-8") as f:
         f.write(new_content)
     
-    print(f"Successfully updated {target_file} using {MODEL_NAME}")
+    print(f"Report updated in {target_file} using {MODEL_NAME}")
 
 if __name__ == "__main__":
     run_analysis()

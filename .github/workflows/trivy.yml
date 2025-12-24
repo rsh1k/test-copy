@@ -1,9 +1,8 @@
-#Run trivy + claude workflow
-name: dotCMS Security Analysis (Claude)
+name: dotCMS Security Analysis (Claude 4.5)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   workflow_dispatch:
 
 permissions:
@@ -15,6 +14,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # fetch-depth 0 is necessary for proper rebasing
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -31,13 +33,18 @@ jobs:
           format: 'json'
           output: 'trivy-results.json'
 
-      - name: Generate and Append Report
+      - name: Generate and Update Report
         run: python scripts/analyze.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Commit Updated Markdown
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Append dotCMS Security Table to private_issue.md [skip ci]"
-          file_pattern: 'private_issue.md'
+      - name: Sync and Commit
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add private_issue.md
+          # Fetch and rebase to avoid non-fast-forward rejection
+          git fetch origin master
+          git rebase origin/master
+          git commit -m "Update dotCMS Security Analysis Table [skip ci]" || echo "No changes to commit"
+          git push origin master

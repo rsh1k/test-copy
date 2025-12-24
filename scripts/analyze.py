@@ -52,9 +52,9 @@ def run_analysis():
     against the dotCMS source code (https://github.com/dotCMS/core):
     {json.dumps(list(sorted_vulns)[:100])}
 
-    MISSION: Create a markdown table with columns: No., CVE name, CVE type (OWASP), Description, Status (✔/✗), and Explaination of Status.
+    MISSION: Create a markdown table with columns: No., CVE name, CVE type (OWASP), Description, Status, and Explaination of Status.
     For high and critical CVEs, analyze dotCMS core repo in Github. Check source codes for compensating controls. 
-    If the vulnerability is present: ✔ Positive. If not: ✗ Positive.
+    If the vulnerability is present: ✔ Positive. If not: ✗ Positive in Status. 
     ONLY return the markdown table.
     """
 

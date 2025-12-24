@@ -5,35 +5,54 @@ from anthropic import Anthropic
 
 def run_analysis():
     MODEL_NAME = "claude-sonnet-4-5"
-    
-    trivy_file = 'trivy-results.json'
-    if not os.path.exists(trivy_file):
-        print(f"Error: {trivy_file} not found.")
-        sys.exit(1)
+    vulnerabilities = []
 
-    with open(trivy_file, 'r', encoding='utf-8') as f:
-        trivy_data = json.load(f)
+    # 1. Parse Trivy Results
+    if os.path.exists('trivy-results.json'):
+        with open('trivy-results.json', 'r') as f:
+            data = json.load(f)
+            for result in data.get('Results', []):
+                for v in result.get('Vulnerabilities', []):
+                    vulnerabilities.append({
+                        "source": "Trivy",
+                        "id": v.get('VulnerabilityID'),
+                        "pkg": v.get('PkgName'),
+                        "severity": v.get('Severity')
+                    })
 
-    vulnerabilities = [
-        {
-            "id": v.get('VulnerabilityID'),
-            "pkg": v.get('PkgName'),
-            "severity": v.get('Severity')
-        } for result in trivy_data.get('Results', []) for v in result.get('Vulnerabilities', [])
-    ]
+    # 2. Parse Docker Scout Results
+    if os.path.exists('scout-results.json'):
+        with open('scout-results.json', 'r') as f:
+            data = json.load(f)
+            # Docker Scout JSON structure varies slightly by version; 
+            # this extracts CVEs from the typical 'vulnerabilities' array
+            for v in data.get('vulnerabilities', []):
+                vulnerabilities.append({
+                    "source": "Scout",
+                    "id": v.get('id'),
+                    "pkg": v.get('package', {}).get('name'),
+                    "severity": v.get('severity')
+                })
+
+    if not vulnerabilities:
+        print("No vulnerabilities found in either scan.")
+        return
+
+    # Deduplicate by ID
+    unique_vulns = {v['id']: v for v in vulnerabilities if v['id']}.values()
+    # Sort by Severity (High/Critical first)
+    severity_map = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    sorted_vulns = sorted(unique_vulns, key=lambda x: severity_map.get(x['severity'].upper(), 9))
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("Error: ANTHROPIC_API_KEY not set.")
-        sys.exit(1)
-        
     client = Anthropic(api_key=api_key)
     
     prompt = f"""
-    Perform a deep-dive security analysis of these CVEs against the dotCMS source code (https://github.com/dotCMS/core):
-    {json.dumps(vulnerabilities[:10])}
+    Perform a security analysis of these unique CVEs (sourced from Trivy & Docker Scout) 
+    against the dotCMS source code (https://github.com/dotCMS/core):
+    {json.dumps(list(sorted_vulns)[:15])}
 
-    MISSION: Create a markdown table with columns: Number, CVE name, CVE type (OWASP), Description, and Status (✔/✗).
+    MISSION: Create a markdown table with columns: Number, Source (Trivy/Scout), CVE name, CVE type (OWASP), Description, and Status (✔/✗).
     Analyze dotCMS core functions for compensating controls. 
     If the vulnerability is present: ✔. If not: ✗.
     ONLY return the markdown table.
@@ -56,7 +75,6 @@ def run_analysis():
     else:
         content = f"# dotCMS Security Analysis\n\n{marker}\n"
 
-    # Robust replacement
     marker_pos = content.find(marker)
     if marker_pos != -1:
         header = content[:marker_pos + len(marker)]
@@ -67,7 +85,7 @@ def run_analysis():
     with open(target_file, "w", encoding="utf-8") as f:
         f.write(new_content)
     
-    print(f"Successfully updated {target_file}")
+    print(f"Successfully updated {target_file} with combined scan data.")
 
 if __name__ == "__main__":
     run_analysis()

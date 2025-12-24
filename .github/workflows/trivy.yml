@@ -15,8 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # fetch-depth 0 is necessary for proper rebasing
-          fetch-depth: 0
+          fetch-depth: 0 # Essential for git operations
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -33,18 +32,23 @@ jobs:
           format: 'json'
           output: 'trivy-results.json'
 
+      # Pull latest changes right before running the script 
+      # to ensure we are editing the most recent version of the file
+      - name: Sync with Remote
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin master --rebase
+
       - name: Generate and Update Report
         run: python scripts/analyze.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Sync and Commit
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add private_issue.md
-          # Fetch and rebase to avoid non-fast-forward rejection
-          git fetch origin master
-          git rebase origin/master
-          git commit -m "Update dotCMS Security Analysis Table [skip ci]" || echo "No changes to commit"
-          git push origin master
+      - name: Commit and Push
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update dotCMS Security Analysis Table [skip ci]"
+          file_pattern: 'private_issue.md'
+          # This helps if the branch has moved again
+          push_options: '--force'

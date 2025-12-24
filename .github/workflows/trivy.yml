@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   validate_vulnerabilities:
@@ -23,7 +22,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Analysis Tools
+      - name: Install Anthropic Client
         run: pip install anthropic
 
       - name: Run Trivy Scan
@@ -44,7 +43,11 @@ jobs:
         with:
           command: cves
           image: dotcms/dotcms:latest
-          write-to: scout-results.json
+          format: json
+          output: scout-results.json
+        env:
+          DOCKER_SCOUT_HUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKER_SCOUT_HUB_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Sync with Remote
         run: |

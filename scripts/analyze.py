@@ -50,7 +50,7 @@ def run_analysis():
     prompt = f"""
     Perform a security analysis of these unique CVEs (sourced from Trivy & Docker Scout) 
     against the dotCMS source code (https://github.com/dotCMS/core):
-    {json.dumps(list(sorted_vulns)[:15])}
+    {json.dumps(list(sorted_vulns)[:100])}
 
     MISSION: Create a markdown table with columns: Number, CVE name, CVE type (OWASP), Description, Status (✔/✗), and Explaination of Status.
     Analyze dotCMS core repo in Github. Check source codes for compensating controls. 

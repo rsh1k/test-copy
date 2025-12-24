@@ -1,14 +1,21 @@
 
 
-| Number | CVE Name | CVE Type (OWASP) | Description | Status |
-|--------|----------|------------------|-------------|--------|
-| 1 | CVE-2016-2781 | A09:2021 - Security Logging and Monitoring Failures | chroot in GNU coreutils allows local users to escape to the parent session via a crafted TIOCSTI ioctl call, which pushes characters to the terminal's input buffer. This is a system-level vulnerability in coreutils package, not directly exploitable through dotCMS application code. dotCMS runs as a web application and does not expose chroot functionality to users. | ✗ |
-| 2 | CVE-2025-0167 | A06:2021 - Vulnerable and Outdated Components | curl vulnerability related to improper handling of IDN domains that could lead to security issues. dotCMS uses curl in container environments but does not expose direct curl functionality to end users. Application-level URL validation and SSRF protections in dotCMS (URLUtils, security filters) provide compensating controls. | ✗ |
-| 3 | CVE-2025-10148 | A06:2021 - Vulnerable and Outdated Components | curl vulnerability in handling of specific protocol scenarios. This is a system library issue. dotCMS implements its own HTTP client handling through Java libraries (Apache HttpClient, URLConnection) rather than relying on system curl for application logic. Input validation and URL sanitization provide defense in depth. | ✗ |
-| 4 | CVE-2025-9086 | A06:2021 - Vulnerable and Outdated Components | curl vulnerability affecting specific transfer scenarios. Similar to above, dotCMS does not use system curl for application-level HTTP operations. The CMS implements HTTP communication through Java-native libraries with built-in validation and security controls in ContentletAPI, RestClient implementations. | ✗ |
-| 5 | CVE-2022-3219 | A02:2021 - Cryptographic Failures | GnuPG vulnerability related to signature verification that could allow signature spoofing via status injection. dotCMS does not implement GPG/PGP signature verification in its core application logic. The CMS uses Java's built-in cryptographic providers (JCE) for signing and encryption operations, not GnuPG binaries. | ✗ |
-| 6 | CVE-2022-3219 | A02:2021 - Cryptographic Failures | Same GnuPG vulnerability affecting gnupg package. dotCMS cryptographic operations use Java Cryptography Architecture (javax.crypto) and do not invoke system GnuPG utilities for signature verification or encryption within application code. | ✗ |
-| 7 | CVE-2022-3219 | A02:2021 - Cryptographic Failures | Same GnuPG vulnerability in gnupg-utils. dotCMS does not utilize GnuPG utilities for any security-critical operations. Key management and cryptographic functions are handled through Java KeyStore and standard Java security libraries. | ✗ |
-| 8 | CVE-2022-3219 | A02:2021 - Cryptographic Failures | Same GnuPG vulnerability in gpg binary. dotCMS application layer does not execute or depend on gpg binary for cryptographic operations. All encryption, signing, and key management uses Java-native implementations. | ✗ |
-| 9 | CVE-2022-3219 | A02:2021 - Cryptographic Failures | Same GnuPG vulnerability in gpg-agent. dotCMS does not interface with gpg-agent for key management or cryptographic operations. Application-level security uses Java security providers and custom key management through configuration. | ✗ |
-| 10 | CVE-2022-3219 | A02:2021 - Cryptographic Failures | Same GnuPG vulnerability in gpgconf. dotCMS does not use gpgconf or any GnuPG configuration utilities. All cryptographic configuration is managed through dotCMS configuration files and Java system properties. | ✗ |
+# Security Analysis of CVEs in dotCMS/core
+
+| Number | Source | CVE ID | CVE Type (OWASP) | Description | Status |
+|--------|--------|--------|------------------|-------------|--------|
+| 1 | Trivy | CVE-2025-66516 | A06:2021 - Vulnerable and Outdated Components | Apache Tika PDF parser vulnerability allowing arbitrary code execution through malicious PDF files | ✔ |
+| 2 | Trivy | CVE-2025-54988 | A06:2021 - Vulnerable and Outdated Components | Apache Tika PDF parser vulnerability enabling denial of service via crafted PDF documents | ✔ |
+| 3 | Trivy | CVE-2024-40094 | A03:2021 - Injection | GraphQL Java denial of service through deeply nested queries causing stack overflow | ✔ |
+| 4 | Trivy | CVE-2024-47072 | A08:2021 - Software and Data Integrity Failures | XStream remote code execution via deserialization of untrusted XML data | ✔ |
+| 5 | Trivy | CVE-2025-48734 | A08:2021 - Software and Data Integrity Failures | Commons BeanUtils arbitrary code execution through unsafe property population | ✔ |
+| 6 | Trivy | CVE-2023-24998 | A01:2021 - Broken Access Control | Commons FileUpload denial of service via unlimited file size processing | ✔ |
+| 7 | Trivy | CVE-2025-48976 | A01:2021 - Broken Access Control | Commons FileUpload path traversal vulnerability in file upload handling | ✔ |
+| 8 | Trivy | CVE-2024-47554 | A01:2021 - Broken Access Control | Commons IO path traversal vulnerability in file operations allowing directory escape | ✔ |
+| 9 | Trivy | CVE-2024-25638 | A06:2021 - Vulnerable and Outdated Components | DNSJava DNSSEC validation bypass allowing DNS spoofing attacks | ✔ |
+| 10 | Trivy | GHSA-crjg-w57m-rqqf | A05:2021 - Security Misconfiguration | DNSJava KeyTrap denial of service through algorithmic complexity in DNSSEC validation | ✔ |
+| 11 | Trivy | GHSA-mmwx-rj87-vfgr | A05:2021 - Security Misconfiguration | DNSJava resource exhaustion via malformed DNS responses | ✔ |
+| 12 | Trivy | CVE-2021-37136 | A06:2021 - Vulnerable and Outdated Components | Netty Codec Bzip2 decoder out-of-bounds write vulnerability leading to RCE | ✔ |
+| 13 | Trivy | CVE-2021-37137 | A06:2021 - Vulnerable and Outdated Components | Netty Codec Snappy decoder integer overflow causing denial of service | ✔ |
+| 14 | Trivy | CVE-2012-6153 | A02:2021 - Cryptographic Failures | Apache HttpClient hostname verification bypass in SSL/TLS connections | ✔ |
+| 15 | Trivy | CVE-2021-40690 | A02:2021 - Cryptographic Failures | Apache Santuario XML Security denial of service via exponential XML entity expansion | ✔ |

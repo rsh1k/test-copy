@@ -54,7 +54,7 @@ def run_analysis():
 
     MISSION: Create a markdown table with columns: No., CVE name, CVE type (OWASP), Description, Status, Likelihood of exploitability and Explaination of Status.
     For high and critical CVEs, analyze dotCMS core repo in Github. Check source codes for compensating controls. 
-    If the vulnerability is present: True Positive. If not: False Positive in Status. Also, mention the likelihood of exploitability level if true positive using statistics.  
+    If the vulnerability is present: True Positive. If not: False Positive in Status. Also, mention the likelihood of exploitability level if true positive using statistics (EPSS score, CISA KEV status, code reacheability, source trace, dead code analysis, compensating controls, attack complexity, etc).  
     ONLY return the markdown table. Please only put CVEs with high and critical score in table. 
     """
 

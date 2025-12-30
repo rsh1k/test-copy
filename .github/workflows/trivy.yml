@@ -1,4 +1,4 @@
-#Run the scanner
+#Run the scanner trivy + claude AI
 name: dotCMS Security Analysis (Claude 4.5)
 
 on:

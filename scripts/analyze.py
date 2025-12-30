@@ -67,9 +67,9 @@ def run_analysis():
     MISSION: Create a markdown table with these exact columns: 
     No., CVE name, CVE type (OWASP), Description, Status, Likelihood of exploitability, and Explaination of Status.
     
-    For these CVEs, analyze dotCMS core repo for compensating controls. 
+    For these CVEs, analyze dotCMS core repo for compensating controls. Mention in the description what code exactly the CVE is present in. 
     Status: 'True Positive' if vulnerable, 'False Positive' if not present/mitigated.
-    Likelihood: Use EPSS, CISA KEV, code reachability, and attack complexity.
+    Likelihood: Use EPSS, CISA KEV, code reachability, and attack complexity for statistics. 
     
     ONLY return the markdown table. Do not include introductory or concluding text.
     """

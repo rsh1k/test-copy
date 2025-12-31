@@ -65,9 +65,9 @@ def run_analysis():
     {json.dumps(list(sorted_vulns)[:100])}
 
     MISSION: Create a markdown table with these exact columns: 
-    No., CVE name, CVE type (OWASP), Description, Status, Likelihood of exploitability, EPSS(short descripion of EPSS in title), and Impact on dotCMS(explaination of Status column).
+    No., CVE name, CVE type (OWASP), CVE Description, Status, Likelihood of exploitability, EPSS(short description of EPSS in title), CISA KEV (short description of CISA KEV in title) and Impact on dotCMS(explaination of Status column).
     
-    For these CVEs, analyze dotCMS core repo for compensating controls. Mention in the description what code exactly the CVE is present in. 
+    For these CVEs, analyze dotCMS core repo for compensating controls. Mention in the explaination what code exactly the CVE is present in. 
     Status: 'True Positive' if vulnerable, 'False Positive' if not present/mitigated.
     Likelihood: Use EPSS, CISA KEV, code reachability, and attack complexity for statistics. 
     

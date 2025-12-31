@@ -69,7 +69,7 @@ def run_analysis():
     
     For these CVEs, analyze dotCMS core repo for compensating controls. Mention in the explaination what code exactly the CVE is present in. 
     Status: 'True Positive' if vulnerable, 'False Positive' if not present/mitigated.
-    Likelihood: Use EPSS, CISA KEV, code reachability, and attack complexity for statistics. 
+    Likelihood: Use EPSS, CISA KEV, code reachability, and attack complexity for statistics. Provide short description. 
     
     ONLY return the markdown table. Do not include introductory or concluding text.
     """

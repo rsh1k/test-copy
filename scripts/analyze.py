@@ -11,7 +11,7 @@ def run_analysis():
     
     vulnerabilities = []
 
-    # 1. Parse Trivy Results
+    # 1. Parse Trivy Results (SCA)
     if os.path.exists('trivy-results.json'):
         with open('trivy-results.json', 'r') as f:
             data = json.load(f)
@@ -21,10 +21,10 @@ def run_analysis():
                         "source": "Trivy",
                         "id": v.get('VulnerabilityID'),
                         "pkg": v.get('PkgName'),
-                        "severity": v.get('Severity')
+                        "severity": v.get('Severity', '').upper()
                     })
 
-    # 2. Parse Docker Scout Results
+    # 2. Parse Docker Scout Results (SCA)
     if os.path.exists('scout-results.json'):
         with open('scout-results.json', 'r') as f:
             data = json.load(f)
@@ -33,26 +33,46 @@ def run_analysis():
                     "source": "Scout",
                     "id": v.get('id'),
                     "pkg": v.get('package', {}).get('name'),
-                    "severity": v.get('severity')
+                    "severity": v.get('severity', '').upper()
                 })
 
+    # 3. Parse Semgrep Results (SAST)
+    if os.path.exists('semgrep-results.json'):
+        with open('semgrep-results.json', 'r') as f:
+            try:
+                data = json.load(f)
+                for res in data.get('results', []):
+                    # Semgrep uses 'ERROR' for high-severity findings
+                    raw_sev = res.get('extra', {}).get('severity', '').upper()
+                    sev = "HIGH" if raw_sev in ["ERROR", "HIGH"] else raw_sev
+                    
+                    vulnerabilities.append({
+                        "source": "Semgrep",
+                        "id": res.get('extra', {}).get('metadata', {}).get('cve', [res.get('check_id')])[0],
+                        "pkg": f"File: {res.get('path')} (Line {res.get('start', {}).get('line')})",
+                        "severity": sev,
+                        "description": res.get('extra', {}).get('message')
+                    })
+            except Exception as e:
+                print(f"Warning: Could not parse Semgrep results: {e}")
+
     if not vulnerabilities:
-        print("No vulnerabilities found in either scan.")
+        print("No vulnerabilities found in any scan.")
         return
 
     # Deduplicate by ID
     unique_vulns = {v['id']: v for v in vulnerabilities if v['id']}.values()
     
-    # Filter for High and Critical only, then sort
+    # Filter for High and Critical only
     severity_map = {"CRITICAL": 0, "HIGH": 1}
-    filtered_vulns = [v for v in unique_vulns if v['severity'].upper() in severity_map]
-    sorted_vulns = sorted(filtered_vulns, key=lambda x: severity_map.get(x['severity'].upper(), 9))
+    filtered_vulns = [v for v in unique_vulns if v['severity'] in severity_map]
+    sorted_vulns = sorted(filtered_vulns, key=lambda x: severity_map.get(x['severity'], 9))
 
     if not sorted_vulns:
         print("No High or Critical vulnerabilities found.")
         return
 
-    # 3. Call Claude API
+    # 4. Call Claude API
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         print("Error: ANTHROPIC_API_KEY not found in environment.")
@@ -61,20 +81,24 @@ def run_analysis():
     client = Anthropic(api_key=api_key)
     
     prompt = f"""
-    Perform a security analysis of these unique High/Critical CVEs against the dotCMS source code (https://github.com/dotCMS/core):
+    Perform a security analysis of these unique High/Critical vulnerabilities against the dotCMS source code (https://github.com/dotCMS/core).
+    
+    DATASET:
     {json.dumps(list(sorted_vulns)[:100])}
 
     MISSION: 
     Create a markdown table with these exact columns: 
-    No., CVE name, OWASP Top 10, CVE Description, Validity, Likelihood of exploitability, EPSS, CISA KEV and Impact on dotCMS(explaination of Validity column + step by step analysis).
-    Please note:
-    Above the table there should be count of each category of owasp present in CVEs.
-    For these CVEs, analyze dotCMS core repo for compensating controls. Mention in the explaination what code exactly the CVE is present in. 
-    Validity: 'True Positive(with eye emoji)' if vulnerable, 'False Positive(with cross emoji)' if not present/mitigated.
-    Likelihood: Use EPSS, CISA KEV, code reachability, and attack complexity for statistics. Provide short description. 
-    At the end after the table: Explain in short about EPSS and CISA KEV. 
+    No., CVE name, OWASP Top 10, CVE Description, Validity, Likelihood of exploitability, EPSS, CISA KEV and Impact on dotCMS (explanation of Validity column + step by step analysis).
     
-    ONLY return the markdown table. Do not include introductory or concluding text.
+    INSTRUCTIONS:
+    1. Above the table, provide a count of each OWASP category present.
+    2. Analyze dotCMS core repo for compensating controls. 
+    3. For Semgrep findings, focus on the specific file path provided.
+    4. Validity: 'True Positive 👁️' if vulnerable, 'False Positive ❌' if not present/mitigated.
+    5. Likelihood: Use EPSS, CISA KEV, code reachability, and attack complexity.
+    6. At the end: Explain EPSS and CISA KEV briefly. 
+    
+    ONLY return the markdown content. No conversational filler.
     """
 
     try:
@@ -89,12 +113,11 @@ def run_analysis():
         print(f"Error calling Anthropic API: {e}")
         sys.exit(1)
 
-    # 4. Smart File Update (Preserving text above heading)
+    # 5. Smart File Update
     if os.path.exists(TARGET_FILE):
         with open(TARGET_FILE, "r", encoding="utf-8") as f:
             lines = f.readlines()
         
-        # Find the line index of the heading
         header_index = -1
         for i, line in enumerate(lines):
             if TARGET_HEADING in line:
@@ -102,22 +125,18 @@ def run_analysis():
                 break
         
         if header_index != -1:
-            # Slice file: keep everything UP TO and INCLUDING the heading line
             header_part = "".join(lines[:header_index + 1])
             new_content = f"{header_part.rstrip()}\n\n{report_table}\n"
         else:
-            # If heading is missing, append it to the existing content
             existing_text = "".join(lines).rstrip()
             new_content = f"{existing_text}\n\n## {TARGET_HEADING}\n\n{report_table}\n"
     else:
-        # Create new file if it doesn't exist
         new_content = f"# Security Report\n\n## {TARGET_HEADING}\n\n{report_table}\n"
 
-    # Write the updated content
     with open(TARGET_FILE, "w", encoding="utf-8") as f:
         f.write(new_content)
     
-    print(f"Successfully updated {TARGET_FILE} while preserving header text.")
+    print(f"Successfully updated {TARGET_FILE} with Trivy, Scout, and Semgrep findings.")
 
 if __name__ == "__main__":
     run_analysis()

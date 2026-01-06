@@ -11,7 +11,7 @@ def run_analysis():
     
     vulnerabilities = []
 
-    # 1. Parse Trivy Results (SCA)
+    # 1. Parse Trivy Results
     if os.path.exists('trivy-results.json'):
         with open('trivy-results.json', 'r') as f:
             data = json.load(f)
@@ -24,7 +24,7 @@ def run_analysis():
                         "severity": v.get('Severity', '').upper()
                     })
 
-    # 2. Parse Docker Scout Results (SCA)
+    # 2. Parse Docker Scout Results
     if os.path.exists('scout-results.json'):
         with open('scout-results.json', 'r') as f:
             data = json.load(f)
@@ -36,34 +36,29 @@ def run_analysis():
                     "severity": v.get('severity', '').upper()
                 })
 
-    # 3. Parse Semgrep Results (SAST)
+    # 3. Parse Semgrep Results
     if os.path.exists('semgrep-results.json'):
         with open('semgrep-results.json', 'r') as f:
             try:
                 data = json.load(f)
                 for res in data.get('results', []):
-                    # Semgrep uses 'ERROR' for high-severity findings
                     raw_sev = res.get('extra', {}).get('severity', '').upper()
                     sev = "HIGH" if raw_sev in ["ERROR", "HIGH"] else raw_sev
-                    
                     vulnerabilities.append({
                         "source": "Semgrep",
                         "id": res.get('extra', {}).get('metadata', {}).get('cve', [res.get('check_id')])[0],
                         "pkg": f"File: {res.get('path')} (Line {res.get('start', {}).get('line')})",
-                        "severity": sev,
-                        "description": res.get('extra', {}).get('message')
+                        "severity": sev
                     })
             except Exception as e:
-                print(f"Warning: Could not parse Semgrep results: {e}")
+                print(f"Warning: Semgrep parse failed: {e}")
 
     if not vulnerabilities:
-        print("No vulnerabilities found in any scan.")
+        print("No vulnerabilities found.")
         return
 
-    # Deduplicate by ID
+    # Deduplicate and Filter
     unique_vulns = {v['id']: v for v in vulnerabilities if v['id']}.values()
-    
-    # Filter for High and Critical only
     severity_map = {"CRITICAL": 0, "HIGH": 1}
     filtered_vulns = [v for v in unique_vulns if v['severity'] in severity_map]
     sorted_vulns = sorted(filtered_vulns, key=lambda x: severity_map.get(x['severity'], 9))
@@ -72,42 +67,41 @@ def run_analysis():
         print("No High or Critical vulnerabilities found.")
         return
 
-    # 4. Call Claude API
+    # 4. Call Claude API with Streaming
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        print("Error: ANTHROPIC_API_KEY not found in environment.")
+        print("Error: ANTHROPIC_API_KEY not found.")
         sys.exit(1)
 
     client = Anthropic(api_key=api_key)
     
     prompt = f"""
-    Perform a security analysis of these unique High/Critical vulnerabilities against the dotCMS source code (https://github.com/dotCMS/core).
-    
-    DATASET:
+    Perform a security analysis of these High/Critical CVEs against the dotCMS source code (https://github.com/dotCMS/core):
     {json.dumps(list(sorted_vulns)[:100])}
 
     MISSION: 
-    Create a markdown table with these exact columns: 
-    No., CVE name, OWASP Top 10, CVE Description, Validity, Likelihood of exploitability, EPSS, CISA KEV and Impact on dotCMS (explanation of Validity column + step by step analysis).
+    Create a markdown table with: No., CVE name, OWASP Top 10, CVE Description, Validity, Likelihood, EPSS, CISA KEV and Impact on dotCMS.
     
-    INSTRUCTIONS:
-    1. Above the table, provide a count of each OWASP category present.
-    2. Analyze dotCMS core repo for compensating controls. 
-    3. For Semgrep findings, focus on the specific file path provided.
-    4. Validity: 'True Positive 👀' if vulnerable, 'False Positive ❌' if not present/mitigated.
-    5. Likelihood: Use EPSS, CISA KEV, code reachability, and attack complexity.
-    6. At the end: Explain EPSS and CISA KEV briefly. 
-    
+    Above the table: provide count of each OWASP category.
+    Validity: 'True Positive 👀' or 'False Positive ❌'.
+    Likelihood: Short description based on EPSS/Kev/Reachability.
+    End: Brief explanation of EPSS and CISA KEV.
+
+    ONLY return markdown.
     """
 
+    report_table = ""
     try:
-        response = client.messages.create(
+        # Use .stream() to avoid the "10 minute" non-streaming restriction
+        with client.messages.stream(
             model=MODEL_NAME,
-            max_tokens=64000,
+            max_tokens=8000,
             system="You are a Senior Security Architect with expert knowledge of the dotCMS/core repository.",
             messages=[{"role": "user", "content": prompt}]
-        )
-        report_table = response.content[0].text
+        ) as stream:
+            for text in stream.text_stream:
+                report_table += text
+                # Optional: print(text, end="", flush=True) to see progress in Github logs
     except Exception as e:
         print(f"Error calling Anthropic API: {e}")
         sys.exit(1)
@@ -135,7 +129,7 @@ def run_analysis():
     with open(TARGET_FILE, "w", encoding="utf-8") as f:
         f.write(new_content)
     
-    print(f"Successfully updated {TARGET_FILE} with Trivy, Scout, and Semgrep findings.")
+    print(f"Successfully updated {TARGET_FILE}")
 
 if __name__ == "__main__":
     run_analysis()

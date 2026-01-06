@@ -125,8 +125,9 @@ def run_analysis():
     1. DO NOT INCLUDE ANY HEADINGS OR TITLES (e.g., no # or ## headers).
     2. Start your response directly with the OWASP summary count.
     3. For Semgrep findings (SAST), analyze the specific file path provided for logic flaws.
-    4. Validity: 'True Positive 👁️' or 'False Positive ❌'.
-    5. Briefly explain EPSS and CISA KEV at the end.
+    4. For Inpact on dotCMS, write detailed explanation about how the vulnerability affect dotCMS. 
+    5. Validity: 'True Positive 👀' or 'False Positive ❌'.
+    6. Briefly explain EPSS and CISA KEV at the end.
     
     ONLY return markdown content.
     """

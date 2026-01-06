@@ -52,15 +52,19 @@ jobs:
 
       - name: Run Semgrep Scan
         run: |
+          # We target the 'src' directory to avoid crashing on large jars/binaries
           semgrep scan \
             --json \
             --output semgrep-results.json \
             --config="p/security-audit" \
             --config="p/owasp-top-10" \
+            --metrics=off \
+            --jobs 1 \
+            --max-memory 4000 \
             --skip-unknown-extensions \
             --timeout 30 \
-            --verbose
-        continue-on-error: true # Crucial: Allows the Python script to run even if some files failed to scan
+            ./src
+        continue-on-error: true
 
       - name: Sync with Remote
         run: |

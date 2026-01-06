@@ -58,7 +58,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SEMGREP_API_TOKEN: ${{ secrets.SEMGREP_API_TOKEN }}
-          SEMGREP_ORG_NAME: "dotCMS" # Replace with your Semgrep Org Slug
+          SEMGREP_ORG_NAME: "dotcms1" # Replace with your Semgrep Org Slug
 
       - name: Commit and Push Report
         uses: stefanzweifel/git-auto-commit-action@v5

@@ -52,8 +52,15 @@ jobs:
 
       - name: Run Semgrep Scan
         run: |
-          semgrep scan --json --output semgrep-results.json --config="p/security-audit" --config="p/owasp-top-10"
-        continue-on-error: true
+          semgrep scan \
+            --json \
+            --output semgrep-results.json \
+            --config="p/security-audit" \
+            --config="p/owasp-top-10" \
+            --skip-unknown-extensions \
+            --timeout 30 \
+            --verbose
+        continue-on-error: true # Crucial: Allows the Python script to run even if some files failed to scan
 
       - name: Sync with Remote
         run: |

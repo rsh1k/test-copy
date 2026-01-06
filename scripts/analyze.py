@@ -5,20 +5,18 @@ import requests
 from anthropic import Anthropic
 
 # --- CONFIGURATION ---
-MODEL_NAME = "claude-sonnet-4-5"
+MODEL_NAME = "claude-sonnet-4-5" # Updated to a valid model string
 TARGET_FILE = "private_issue.md"
 TARGET_HEADING = "Security Analysis: High and Critical CVEs in dotCMS"
 
 def get_semgrep_findings(api_token, org_slug):
     """
     Pulls High/Critical findings from the Semgrep Cloud API.
-    Docs: https://semgrep.dev/api/v1/docs/
     """
     print(f"--- Fetching findings from Semgrep Cloud ({org_slug}) ---")
     url = f"https://semgrep.dev/api/v1/deployments/{org_slug}/findings"
     headers = {"Authorization": f"Bearer {api_token}"}
     
-    # We filter for 'unresolved' and high/critical severity to keep the AI focused
     params = {
         "issue_type": "sast",
         "state": "unresolved",
@@ -32,7 +30,6 @@ def get_semgrep_findings(api_token, org_slug):
         
         external_vulns = []
         for finding in data.get('findings', []):
-            # Extracting the most relevant info for Claude
             rule_id = finding.get('rule_name')
             file_path = finding.get('location', {}).get('file_path', 'unknown')
             line_num = finding.get('location', {}).get('line', '?')
@@ -54,7 +51,7 @@ def get_semgrep_findings(api_token, org_slug):
 def run_analysis():
     vulnerabilities = []
 
-    # 1. Parse Trivy Results (SCA)
+    # 1. Parse Trivy Results
     if os.path.exists('trivy-results.json'):
         with open('trivy-results.json', 'r') as f:
             data = json.load(f)
@@ -68,7 +65,7 @@ def run_analysis():
                         "description": v.get('Description', '')
                     })
 
-    # 2. Parse Docker Scout Results (SCA)
+    # 2. Parse Docker Scout Results
     if os.path.exists('scout-results.json'):
         with open('scout-results.json', 'r') as f:
             data = json.load(f)
@@ -95,7 +92,7 @@ def run_analysis():
         print("No vulnerabilities found in any scan.")
         return
 
-    # Deduplicate and Filter for High/Critical
+    # Deduplicate and Filter
     unique_vulns = {v['id']: v for v in vulnerabilities if v['id']}.values()
     severity_map = {"CRITICAL": 0, "HIGH": 1}
     filtered_vulns = [v for v in unique_vulns if v['severity'] in severity_map]
@@ -105,7 +102,7 @@ def run_analysis():
         print("No High or Critical vulnerabilities found.")
         return
 
-    # 4. Call Claude API with Streaming
+    # 4. Call Claude API
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         print("Error: ANTHROPIC_API_KEY not found.")
@@ -113,6 +110,7 @@ def run_analysis():
 
     client = Anthropic(api_key=api_key)
     
+    # CRITICAL FIX: Explicit instructions to NOT include a title/heading
     prompt = f"""
     Perform a professional security analysis of these unique High/Critical vulnerabilities against the dotCMS repository.
     
@@ -124,22 +122,21 @@ def run_analysis():
     No., CVE name/Rule, OWASP Top 10, Description, Validity, Likelihood, EPSS, CISA KEV and Impact on dotCMS.
     
     INSTRUCTIONS:
-    1. For Semgrep findings (SAST), analyze the specific file path provided for logic flaws.
-    2. For Trivy/Scout findings (SCA), check if the library is used in a dangerous way in dotCMS core.
-    3. Validity: 'True Positive 👁️' or 'False Positive ❌'.
-    4. Provide an OWASP summary count at the top.
+    1. DO NOT INCLUDE ANY HEADINGS OR TITLES (e.g., no # or ## headers).
+    2. Start your response directly with the OWASP summary count.
+    3. For Semgrep findings (SAST), analyze the specific file path provided for logic flaws.
+    4. Validity: 'True Positive 👁️' or 'False Positive ❌'.
     5. Briefly explain EPSS and CISA KEV at the end.
     
-    ONLY return markdown.
+    ONLY return markdown content.
     """
 
     report_table = ""
     try:
-        # Use streaming to prevent 10-minute timeout errors
         with client.messages.stream(
             model=MODEL_NAME,
             max_tokens=8000,
-            system="You are a Lead Security Engineer expert in dotCMS and static/dynamic analysis.",
+            system="You are a Lead Security Engineer expert in dotCMS. You provide raw markdown body content without titles or introductions.",
             messages=[{"role": "user", "content": prompt}]
         ) as stream:
             for text in stream.text_stream:
@@ -148,19 +145,24 @@ def run_analysis():
         print(f"Error calling Anthropic API: {e}")
         sys.exit(1)
 
-    # 5. Update Target Markdown File
+    # 5. Update Target Markdown File (Replacement Logic)
+    header_line = f"## {TARGET_HEADING}"
+    
     if os.path.exists(TARGET_FILE):
         with open(TARGET_FILE, "r", encoding="utf-8") as f:
             content = f.read()
         
-        if TARGET_HEADING in content:
-            # Replace old table if header exists
-            parts = content.split(f"## {TARGET_HEADING}")
-            new_content = f"{parts[0].strip()}\n\n## {TARGET_HEADING}\n\n{report_table}\n"
+        if header_line in content:
+            # We split at the header and keep only parts[0] (what's above the header).
+            # This effectively deletes everything that was below the header previously.
+            parts = content.split(header_line)
+            new_content = f"{parts[0].strip()}\n\n{header_line}\n\n{report_table.strip()}\n"
         else:
-            new_content = f"{content.strip()}\n\n## {TARGET_HEADING}\n\n{report_table}\n"
+            # If the heading doesn't exist, append it
+            new_content = f"{content.strip()}\n\n{header_line}\n\n{report_table.strip()}\n"
     else:
-        new_content = f"# Security Report\n\n## {TARGET_HEADING}\n\n{report_table}\n"
+        # Create new file
+        new_content = f"# Security Report\n\n{header_line}\n\n{report_table.strip()}\n"
 
     with open(TARGET_FILE, "w", encoding="utf-8") as f:
         f.write(new_content)

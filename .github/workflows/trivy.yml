@@ -52,12 +52,11 @@ jobs:
 
       - name: Run Semgrep Scan
         run: |
-          # We target the 'src' directory to avoid crashing on large jars/binaries
+          # Use --config auto to let Semgrep handle rule resolution
           semgrep scan \
             --json \
             --output semgrep-results.json \
-            --config="p/security-audit" \
-            --config="p/owasp-top-10" \
+            --config auto \
             --metrics=off \
             --jobs 1 \
             --max-memory 4000 \

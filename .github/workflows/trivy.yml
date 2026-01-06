@@ -1,4 +1,4 @@
-name: dotCMS Security Analysis (Claude 4.5)
+name: dotCMS Security Analysis (Cloud API Mode)
 
 on:
   push:
@@ -9,13 +9,11 @@ permissions:
   contents: write
 
 jobs:
-  validate_vulnerabilities:
+  analyze_vulnerabilities:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -23,8 +21,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install Dependencies
-        run: |
-          pip install anthropic semgrep
+        run: pip install anthropic requests
 
       - name: Run Trivy Scan
         uses: aquasecurity/trivy-action@master
@@ -50,38 +47,21 @@ jobs:
           DOCKER_SCOUT_HUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKER_SCOUT_HUB_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Run Semgrep Scan
-        run: |
-          # We specify p/java and p/security-audit directly to avoid the 'auto' metrics error
-          # Targeting ./src ensures we scan the core code and not build artifacts
-          semgrep scan \
-            --json \
-            --output semgrep-results.json \
-            --config="p/java" \
-            --config="p/security-audit" \
-            --config="p/owasp-top-10" \
-            --metrics=off \
-            --jobs 1 \
-            --max-memory 4000 \
-            --skip-unknown-extensions \
-            --timeout 30 \
-            ./src
-        continue-on-error: true
-
       - name: Sync with Remote
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git pull origin master --rebase
 
-      - name: Generate and Update Report
+      - name: Generate AI Report
         run: python scripts/analyze.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SEMGREP_API_TOKEN: ${{ secrets.SEMGREP_API_TOKEN }}
+          SEMGREP_ORG_NAME: "your-org-slug" # Replace with your Semgrep Org Slug
 
-      - name: Commit and Push
+      - name: Commit and Push Report
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Update dotCMS Security Analysis (Trivy + Scout + Semgrep) [skip ci]"
+          commit_message: "Update Security Report from Semgrep Cloud & SCA [skip ci]"
           file_pattern: 'private_issue.md'
-          push_options: '--force'

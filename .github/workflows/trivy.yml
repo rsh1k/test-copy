@@ -1,4 +1,4 @@
-name: dotCMS Security Analysis (Cloud API Mode)
+name: dotCMS Security Analysis
 
 on:
   push:
@@ -14,6 +14,9 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          # Fetch all history so rebasing/merging works correctly
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -47,21 +50,18 @@ jobs:
           DOCKER_SCOUT_HUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKER_SCOUT_HUB_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Sync with Remote
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin master --rebase
-
       - name: Generate AI Report
         run: python scripts/analyze.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SEMGREP_API_TOKEN: ${{ secrets.SEMGREP_API_TOKEN }}
-          SEMGREP_ORG_NAME: "dotcms1" # Replace with your Semgrep Org Slug
+          SEMGREP_ORG_NAME: "dotcms1"
 
       - name: Commit and Push Report
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Update Security Report from Semgrep Cloud & SCA [skip ci]"
           file_pattern: 'private_issue.md'
+          # This handles the 'non-fast-forward' error by forcing the push
+          push_options: '--force' 
+          # Alternatively, you can use '--force-with-lease' for more safety

@@ -66,12 +66,13 @@ def run_analysis():
 
     MISSION: 
     Create a markdown table with these exact columns: 
-    No., CVE name, OWASP Top 10 (Category of CVEs), CVE Description, Validity, Likelihood of exploitability, EPSS, CISA KEV and Impact on dotCMS(explaination of Validity column + step by step analysis).
+    No., CVE name, OWASP Top 10, CVE Description, Validity, Likelihood of exploitability, EPSS, CISA KEV and Impact on dotCMS(explaination of Validity column + step by step analysis).
     Please note:
-    Above the table there should be count of each category of owasp present in CVEs. When the name of the column in the table is hover it should show short description if what that column name mean.
+    Above the table there should be count of each category of owasp present in CVEs.
     For these CVEs, analyze dotCMS core repo for compensating controls. Mention in the explaination what code exactly the CVE is present in. 
     Validity: 'True Positive(with eye emoji)' if vulnerable, 'False Positive(with cross emoji)' if not present/mitigated.
     Likelihood: Use EPSS, CISA KEV, code reachability, and attack complexity for statistics. Provide short description. 
+    At the end after the table: Explain in short about EPSS and CISA KEV. 
     
     ONLY return the markdown table. Do not include introductory or concluding text.
     """

@@ -94,11 +94,10 @@ def run_analysis():
     1. Above the table, provide a count of each OWASP category present.
     2. Analyze dotCMS core repo for compensating controls. 
     3. For Semgrep findings, focus on the specific file path provided.
-    4. Validity: 'True Positive 👁️' if vulnerable, 'False Positive ❌' if not present/mitigated.
+    4. Validity: 'True Positive 👀' if vulnerable, 'False Positive ❌' if not present/mitigated.
     5. Likelihood: Use EPSS, CISA KEV, code reachability, and attack complexity.
     6. At the end: Explain EPSS and CISA KEV briefly. 
     
-    ONLY return the markdown content. No conversational filler.
     """
 
     try:

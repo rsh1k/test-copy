@@ -103,7 +103,7 @@ def run_analysis():
     try:
         response = client.messages.create(
             model=MODEL_NAME,
-            max_tokens=4000,
+            max_tokens=64000,
             system="You are a Senior Security Architect with expert knowledge of the dotCMS/core repository.",
             messages=[{"role": "user", "content": prompt}]
         )

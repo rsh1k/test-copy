@@ -52,11 +52,14 @@ jobs:
 
       - name: Run Semgrep Scan
         run: |
-          # Use --config auto to let Semgrep handle rule resolution
+          # We specify p/java and p/security-audit directly to avoid the 'auto' metrics error
+          # Targeting ./src ensures we scan the core code and not build artifacts
           semgrep scan \
             --json \
             --output semgrep-results.json \
-            --config auto \
+            --config="p/java" \
+            --config="p/security-audit" \
+            --config="p/owasp-top-10" \
             --metrics=off \
             --jobs 1 \
             --max-memory 4000 \

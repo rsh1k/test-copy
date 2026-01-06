@@ -1,4 +1,3 @@
-#Workflow to run the scanner: trivy + docker scout + claude AI
 name: dotCMS Security Analysis (Claude 4.5)
 
 on:
@@ -23,8 +22,9 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Anthropic Client
-        run: pip install anthropic
+      - name: Install Dependencies
+        run: |
+          pip install anthropic semgrep
 
       - name: Run Trivy Scan
         uses: aquasecurity/trivy-action@master
@@ -50,6 +50,11 @@ jobs:
           DOCKER_SCOUT_HUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKER_SCOUT_HUB_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Run Semgrep Scan
+        run: |
+          semgrep scan --json --output semgrep-results.json --config="p/security-audit" --config="p/owasp-top-10"
+        continue-on-error: true
+
       - name: Sync with Remote
         run: |
           git config --global user.name "github-actions[bot]"
@@ -64,6 +69,6 @@ jobs:
       - name: Commit and Push
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Update dotCMS Security Analysis (Trivy + Scout) [skip ci]"
+          commit_message: "Update dotCMS Security Analysis (Trivy + Scout + Semgrep) [skip ci]"
           file_pattern: 'private_issue.md'
           push_options: '--force'

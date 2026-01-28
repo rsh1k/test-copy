@@ -1,0 +1,35 @@
+name: Sync Critical Vulns to Issues
+
+on:
+  push:
+    paths:
+      - 'README.md' # Only runs when the scanner updates this file
+  workflow_dispatch: # Allows you to run it manually from the Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Required permissions to read the repo and write issues
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: pip install PyGithub
+
+      - name: Run Sync Script
+        env:
+          # This uses the built-in GitHub secret automatically
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pass the repo name dynamically so you don't have to hardcode it in Python
+          REPO_NAME: ${{ github.repository }} 
+        run: python create_issue.py
